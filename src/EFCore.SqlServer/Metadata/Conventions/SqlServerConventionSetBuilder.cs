@@ -101,6 +101,9 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
                 (SharedTableConvention)new SqlServerSharedTableConvention(Dependencies, RelationalDependencies));
             conventionSet.ModelFinalizingConventions.Add(new SqlServerDbFunctionConvention(Dependencies, RelationalDependencies));
 
+            var temporalConvention = new SqlServerTemporalConvention();
+            conventionSet.ModelFinalizingConventions.Add(temporalConvention);
+
             return conventionSet;
         }
 

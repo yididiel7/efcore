@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore.ChangeTracking.Internal;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
@@ -162,6 +163,8 @@ namespace Microsoft.EntityFrameworkCore.Migrations.Internal
                     TestServiceFactory.Instance.Create<RelationalTypeMappingSourceDependencies>()),
                 new MigrationsAnnotationProvider(
                     new MigrationsAnnotationProviderDependencies()),
+                new RelationalAnnotationProvider(
+                    new RelationalAnnotationProviderDependencies()),
                 context.GetService<IChangeDetector>(),
                 context.GetService<IUpdateAdapterFactory>(),
                 context.GetService<CommandBatchPreparerDependencies>());

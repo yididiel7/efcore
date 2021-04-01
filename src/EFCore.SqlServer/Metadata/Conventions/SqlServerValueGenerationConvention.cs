@@ -53,6 +53,26 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
             base.ProcessPropertyAnnotationChanged(propertyBuilder, name, annotation, oldAnnotation, context);
         }
 
+        /// <inheritdoc />
+        public override void ProcessEntityTypeAnnotationChanged(
+            IConventionEntityTypeBuilder entityTypeBuilder,
+            string name,
+            IConventionAnnotation? annotation,
+            IConventionAnnotation? oldAnnotation,
+            IConventionContext<IConventionAnnotation> context)
+        {
+            if ((name == SqlServerAnnotationNames.TemporalPeriodStartPropertyName
+                || name == SqlServerAnnotationNames.TemporalPeriodEndPropertyName)
+                && annotation != null
+                && annotation.Value is string propertyName
+                && entityTypeBuilder.Metadata.FindProperty(propertyName) is IConventionProperty property)
+            {
+                property.SetValueGenerated(ValueGenerated.OnAddOrUpdate);
+            }
+
+            base.ProcessEntityTypeAnnotationChanged(entityTypeBuilder, name, annotation, oldAnnotation, context);
+        }
+
         /// <summary>
         ///     Returns the store value generation strategy to set for the given property.
         /// </summary>

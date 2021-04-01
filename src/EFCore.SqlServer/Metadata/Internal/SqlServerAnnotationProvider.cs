@@ -92,10 +92,20 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.Metadata.Internal
         /// </summary>
         public override IEnumerable<IAnnotation> For(ITable table)
         {
+            var entityType = table.EntityTypeMappings.First().EntityType;
+
             // Model validation ensures that these facets are the same on all mapped entity types
-            if (table.EntityTypeMappings.First().EntityType.IsMemoryOptimized())
+            if (entityType.IsMemoryOptimized())
             {
                 yield return new Annotation(SqlServerAnnotationNames.MemoryOptimized, true);
+            }
+
+            if (entityType.IsTemporal())
+            {
+                yield return new Annotation(SqlServerAnnotationNames.IsTemporal, entityType.IsTemporal());
+                yield return new Annotation(SqlServerAnnotationNames.TemporalPeriodStartColumnName, entityType.TemporalPeriodStartColumnName());
+                yield return new Annotation(SqlServerAnnotationNames.TemporalPeriodEndColumnName, entityType.TemporalPeriodEndColumnName());
+                yield return new Annotation(SqlServerAnnotationNames.TemporalHistoryTableName, entityType.TemporalHistoryTableName());
             }
         }
 
@@ -191,6 +201,26 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.Metadata.Internal
             if (property.IsSparse() is bool isSparse)
             {
                 yield return new Annotation(SqlServerAnnotationNames.Sparse, isSparse);
+            }
+
+            var entityType = column.Table.EntityTypeMappings.First().EntityType;
+            if (entityType.IsTemporal())
+            {
+                var periodStartColumnName = entityType.TemporalPeriodStartColumnName();
+                var periodEndColumnName = entityType.TemporalPeriodEndColumnName();
+                if (column.Name == periodStartColumnName || column.Name == periodEndColumnName)
+                {
+                    yield return new Annotation(SqlServerAnnotationNames.IsTemporal, entityType.IsTemporal());
+
+                    if (periodStartColumnName == column.Name)
+                    {
+                        yield return new Annotation(SqlServerAnnotationNames.IsTemporalPeriodStartColumn, true);
+                    }
+                    else
+                    {
+                        yield return new Annotation(SqlServerAnnotationNames.IsTemporalPeriodEndColumn, true);
+                    }
+                }
             }
         }
     }

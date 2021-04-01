@@ -80,6 +80,7 @@ namespace Microsoft.EntityFrameworkCore.Migrations.Internal
         public MigrationsModelDiffer(
             IRelationalTypeMappingSource typeMappingSource,
             IMigrationsAnnotationProvider migrationsAnnotations,
+            IRelationalAnnotationProvider relationalAnnotations,
 #pragma warning disable EF1001 // Internal EF Core API usage.
             IChangeDetector changeDetector,
 #pragma warning restore EF1001 // Internal EF Core API usage.
@@ -88,6 +89,7 @@ namespace Microsoft.EntityFrameworkCore.Migrations.Internal
         {
             Check.NotNull(typeMappingSource, nameof(typeMappingSource));
             Check.NotNull(migrationsAnnotations, nameof(migrationsAnnotations));
+            Check.NotNull(relationalAnnotations, nameof(relationalAnnotations));
 #pragma warning disable EF1001 // Internal EF Core API usage.
             Check.NotNull(changeDetector, nameof(changeDetector));
 #pragma warning restore EF1001 // Internal EF Core API usage.
@@ -96,6 +98,7 @@ namespace Microsoft.EntityFrameworkCore.Migrations.Internal
 
             TypeMappingSource = typeMappingSource;
             MigrationsAnnotations = migrationsAnnotations;
+            RelationalAnnotations = relationalAnnotations;
             ChangeDetector = changeDetector;
             UpdateAdapterFactory = updateAdapterFactory;
             CommandBatchPreparerDependencies = commandBatchPreparerDependencies;
@@ -116,6 +119,14 @@ namespace Microsoft.EntityFrameworkCore.Migrations.Internal
         ///     doing so can result in application failures when updating to a new Entity Framework Core release.
         /// </summary>
         protected virtual IMigrationsAnnotationProvider MigrationsAnnotations { get; }
+
+        /// <summary>
+        ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+        ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+        ///     any release. You should only use it directly in your code with extreme caution and knowing that
+        ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+        /// </summary>
+        protected virtual IRelationalAnnotationProvider RelationalAnnotations { get; }
 
         /// <summary>
         ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
@@ -608,13 +619,18 @@ namespace Microsoft.EntityFrameworkCore.Migrations.Internal
             if (source.Schema != target.Schema
                 || source.Name != target.Name)
             {
-                yield return new RenameTableOperation
+                var renameTableOperation = new RenameTableOperation
                 {
                     Schema = source.Schema,
                     Name = source.Name,
                     NewSchema = target.Schema,
                     NewName = target.Name
                 };
+
+                // TODO: should we use annotation provider here?
+                renameTableOperation.AddAnnotations(source.GetAnnotations());
+
+                yield return renameTableOperation;
             }
 
             var sourceMigrationsAnnotations = source.GetAnnotations();
@@ -992,8 +1008,10 @@ namespace Microsoft.EntityFrameworkCore.Migrations.Internal
             var sourceColumnType = source.StoreType ?? sourceTypeMapping.StoreType;
             var targetColumnType = target.StoreType ?? targetTypeMapping.StoreType;
 
-            var sourceMigrationsAnnotations = source.GetAnnotations();
-            var targetMigrationsAnnotations = target.GetAnnotations();
+            var sourceMigrationsAnnotations = RelationalAnnotations.For(source);
+            var targetMigrationsAnnotations = RelationalAnnotations.For(target);
+            //var sourceMigrationsAnnotations = source.GetAnnotations();
+            //var targetMigrationsAnnotations = target.GetAnnotations();
 
             var isNullableChanged = source.IsNullable != target.IsNullable;
             var columnTypeChanged = sourceColumnType != targetColumnType;
@@ -1055,6 +1073,7 @@ namespace Microsoft.EntityFrameworkCore.Migrations.Internal
             var targetMapping = target.PropertyMappings.First();
             var targetTypeMapping = targetMapping.TypeMapping;
 
+            // TODO: use annotation provider here also?
             Initialize(
                 operation, target, targetTypeMapping, target.IsNullable,
                 target.GetAnnotations(), inline);

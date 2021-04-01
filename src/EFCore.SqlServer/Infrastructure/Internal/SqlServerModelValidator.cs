@@ -223,6 +223,7 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.Infrastructure.Internal
         {
             var firstMappedType = mappedTypes[0];
             var isMemoryOptimized = firstMappedType.IsMemoryOptimized();
+            var isTemporal = firstMappedType.IsTemporal();
 
             foreach (var otherMappedType in mappedTypes.Skip(1))
             {
@@ -234,6 +235,11 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.Infrastructure.Internal
                             isMemoryOptimized ? firstMappedType.DisplayName() : otherMappedType.DisplayName(),
                             !isMemoryOptimized ? firstMappedType.DisplayName() : otherMappedType.DisplayName()));
                 }
+
+                if (isTemporal && otherMappedType.IsTemporal())
+                {
+                    throw new InvalidOperationException("Only root entity type should be marked as temporal.");
+                }    
             }
 
             base.ValidateSharedTableCompatibility(mappedTypes, tableName, schema, logger);

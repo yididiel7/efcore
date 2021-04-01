@@ -10023,6 +10023,125 @@ ORDER BY [t].[Id]");
 
         #endregion
 
+
+        [ConditionalFact]
+        public virtual void TemportalTest()
+        {
+            using (var ctx = new MyContext())
+            {
+                ctx.Database.EnsureDeleted();
+                ctx.Database.EnsureCreated();
+
+                var p11 = new TemporalPost { Id = 11, Name = "p11" };
+                var p12 = new TemporalPost { Id = 12, Name = "p12" };
+                var p21 = new TemporalPost { Id = 21, Name = "p21" };
+                var p22 = new TemporalPost { Id = 22, Name = "p22" };
+                var p23 = new TemporalPost { Id = 23, Name = "p23" };
+
+                var b1 = new TemporalBlog { Id = 1, Name = "b1", Posts = new List<TemporalPost> { p11, p12 } };
+                var b2 = new TemporalBlog { Id = 2, Name = "b2", Posts = new List<TemporalPost> { p21, p22, p23 } };
+
+                ctx.Blogs.AddRange(b1, b2);
+                ctx.Posts.AddRange(p11, p12, p21, p22, p23);
+                ctx.SaveChanges();
+            }
+
+            using (var ctx = new MyContext())
+            {
+                var b = ctx.Blogs.First();
+                b.Name = "Renamed";
+
+                ctx.SaveChanges();
+            }
+
+            using (var ctx = new MyContext())
+            {
+                //var dateTime = DateTime.Parse("2020-03-18 08:00:00");
+                var dateTime = new DateTime(2020, 3, 18, 8, 0, 0);
+                //var query = ctx.Posts.AsOf(dateTime).Where(p => p.Blog.Name != "Foo").ToList();
+            }
+        }
+
+        public class MyContext : DbContext
+        {
+            public DbSet<TemporalBlog> Blogs { get; set; }
+            public DbSet<TemporalPost> Posts { get; set; }
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                // TODO: test negative when start and end are same property - we should throw!
+
+                modelBuilder.Entity<TemporalBlog>().IsTemporal();// "Start", "End", "BlogHistory");
+                modelBuilder.Entity<TemporalBlog>().Property(x => x.Id).ValueGeneratedNever();
+                modelBuilder.Entity<TemporalBlog>().Property(x => x.Id).HasColumnName("PeriodStart");
+
+
+                modelBuilder.Entity<TemporalPost>().IsTemporal(x => x.PeriodStart, x => x.PeriodEnd);
+                modelBuilder.Entity<TemporalPost>().Property(x => x.Id).ValueGeneratedNever();
+
+                modelBuilder.Entity<TemporalBlog>().HasMany(x => x.Posts).WithOne(x => x.Blog).IsRequired();
+
+
+                modelBuilder.Entity<TemporalCustomer>().IsTemporal();
+                modelBuilder.Entity<TemporalVipCustomer>().HasBaseType<TemporalCustomer>();
+                modelBuilder.Entity<TemporalVipCustomer2>().HasBaseType<TemporalCustomer>();
+            }
+
+            protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+            {
+                optionsBuilder.UseSqlServer(@"Server=(localdb)\mssqllocaldb;Database=TemporalRepro2;Trusted_Connection=True;MultipleActiveResultSets=true");
+            }
+        }
+
+        public class TemporalBlog
+        {
+            public int Id { get; set; }
+            public string Name { get; set; }
+            public List<TemporalPost> Posts { get; set; }
+
+            //[DatabaseGenerated(DatabaseGeneratedOption.Computed)]
+            //public DateTime Start { get; set; }
+
+            //[DatabaseGenerated(DatabaseGeneratedOption.Computed)]
+            //public DateTime End { get; set; }
+        }
+
+        public class TemporalPost
+        {
+            public int Id { get; set; }
+            public string Name { get; set; }
+
+            //[DatabaseGenerated(DatabaseGeneratedOption.Computed)]
+            public DateTime PeriodStart { get; set; }
+
+            //[DatabaseGenerated(DatabaseGeneratedOption.Computed)]
+            public DateTime PeriodEnd { get; set; }
+
+            public TemporalBlog Blog { get; set; }
+        }
+
+
+
+
+
+        public class TemporalCustomer
+        {
+            public int Id { get; set; }
+            public string Name { get; set; }
+        }
+
+        public class TemporalVipCustomer : TemporalCustomer
+        {
+            public decimal Discount { get; set; }
+        }
+
+
+        public class TemporalVipCustomer2 : TemporalCustomer
+        {
+            public decimal Discount { get; set; }
+        }
+
+
         protected override string StoreName => "QueryBugsTest";
         protected TestSqlLoggerFactory TestSqlLoggerFactory
             => (TestSqlLoggerFactory)ListLoggerFactory;

@@ -492,6 +492,16 @@ SELECT
     [t].[is_memory_optimized]";
             }
 
+            if (supportsTemporalTable)
+            {
+                // TODO: is it possible to have more than one of these generated columns per table? - TEST!!!
+                commandText += @",
+    [t].[temporal_type],
+    (SELECT [t2].[name] FROM [sys].[tables] AS t2 WHERE [t2].[object_id] = [t].[history_table_id]) AS [history_table_name],
+	(SELECT [c].[name] FROM [sys].[columns] as [c] WHERE [c].[object_id] = [t].[object_id] AND [c].[generated_always_type] = 1) as [period_start_column],
+	(SELECT [c].[name] FROM [sys].[columns] as [c] WHERE [c].[object_id] = [t].[object_id] AND [c].[generated_always_type] = 2) as [period_end_column]";
+            }
+
             commandText += @"
 FROM [sys].[tables] AS [t]
 LEFT JOIN [sys].[extended_properties] AS [e] ON [e].[major_id] = [t].[object_id] AND [e].[minor_id] = 0 AND [e].[class] = 1 AND [e].[name] = 'MS_Description'";
@@ -538,6 +548,15 @@ SELECT
             {
                 viewCommandText += @",
     CAST(0 AS bit) AS [is_memory_optimized]";
+            }
+
+            if (supportsTemporalTable)
+            {
+                viewCommandText += @",
+    1 AS [temporal_type],
+    NULL AS [history_table_name],
+    NULL AS [period_start_column],
+    NULL AS [period_end_column]";
             }
 
             viewCommandText += @"
@@ -587,6 +606,23 @@ WHERE "
                         }
                     }
 
+                    if (supportsTemporalTable)
+                    {
+                        if (reader.GetValueOrDefault<int>("temporal_type") == 2)
+                        {
+                            table[SqlServerAnnotationNames.IsTemporal] = true;
+
+                            var historyTableName = reader.GetValueOrDefault<string>("history_table_name");
+                            table[SqlServerAnnotationNames.TemporalHistoryTableName] = historyTableName;
+
+                            var periodStartColumnName = reader.GetValueOrDefault<string>("period_start_column");
+                            table[SqlServerAnnotationNames.TemporalPeriodStartColumnName] = periodStartColumnName;
+
+                            var periodEndColumnName = reader.GetValueOrDefault<string>("period_end_column");
+                            table[SqlServerAnnotationNames.TemporalPeriodEndColumnName] = periodEndColumnName;
+                        }
+                    }
+
                     tables.Add(table);
                 }
             }
@@ -595,6 +631,37 @@ WHERE "
             GetColumns(connection, tables, filter, viewFilter, typeAliases, databaseModel.Collation);
             GetIndexes(connection, tables, filter);
             GetForeignKeys(connection, tables, filter);
+
+            foreach (var temporalTable in tables.Where(t => t[SqlServerAnnotationNames.IsTemporal] as bool? == true))
+            {
+                // TODO: hidden columns - the period could only be defined in history table and not in the actual temporal table
+                // need to fix/accommodate for this in other places also 
+                var periodStartColumn = temporalTable.Columns
+                    .Where(c => c.Name == temporalTable[SqlServerAnnotationNames.TemporalPeriodStartColumnName] as string)
+                    .SingleOrDefault();
+
+                if (periodStartColumn != null)
+                {
+                    periodStartColumn[SqlServerAnnotationNames.IsTemporalPeriodStartColumn] = true;
+                }
+
+                var periodEndColumn = temporalTable.Columns
+                    .Where(c => c.Name == temporalTable[SqlServerAnnotationNames.TemporalPeriodEndColumnName] as string)
+                    .SingleOrDefault();
+
+                if (periodEndColumn != null)
+                {
+                    periodEndColumn[SqlServerAnnotationNames.IsTemporalPeriodEndColumn] = true;
+                }
+
+                //temporalTable.Columns
+                //    .Where(c => c.Name == temporalTable[SqlServerAnnotationNames.TemporalPeriodStartColumnName] as string)
+                //    .Single()[SqlServerAnnotationNames.IsTemporalPeriodStartColumn] = true;
+
+                //temporalTable.Columns
+                //    .Where(c => c.Name == temporalTable[SqlServerAnnotationNames.TemporalPeriodEndColumnName] as string)
+                //    .Single()[SqlServerAnnotationNames.IsTemporalPeriodEndColumn] = true;
+            }
 
             foreach (var table in tables)
             {

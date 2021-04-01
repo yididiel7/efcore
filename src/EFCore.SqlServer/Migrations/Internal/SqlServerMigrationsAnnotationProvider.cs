@@ -44,5 +44,49 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.Migrations.Internal
         /// <inheritdoc />
         public override IEnumerable<IAnnotation> ForRemove(ITable table)
             => table.GetAnnotations();
+
+        /// <inheritdoc />
+        public override IEnumerable<IAnnotation> ForRemove(IUniqueConstraint constraint)
+        {
+            if (constraint.Table[SqlServerAnnotationNames.IsTemporal] as bool? == true)
+            {
+                yield return new Annotation(SqlServerAnnotationNames.IsTemporal, true);
+
+                yield return new Annotation(
+                    SqlServerAnnotationNames.TemporalPeriodStartColumnName,
+                    constraint.Table[SqlServerAnnotationNames.TemporalPeriodStartColumnName]);
+
+                yield return new Annotation(
+                    SqlServerAnnotationNames.TemporalPeriodEndColumnName,
+                    constraint.Table[SqlServerAnnotationNames.TemporalPeriodEndColumnName]);
+
+                yield return new Annotation(
+                    SqlServerAnnotationNames.TemporalHistoryTableName,
+                    constraint.Table[SqlServerAnnotationNames.TemporalHistoryTableName]);
+            }
+        }
+
+        /// <inheritdoc />
+        public override IEnumerable<IAnnotation> ForRemove(IColumn column)
+        {
+            if (column.Table[SqlServerAnnotationNames.IsTemporal] as bool? == true)
+            {
+                yield return new Annotation(SqlServerAnnotationNames.IsTemporal, true);
+
+                if (column[SqlServerAnnotationNames.IsTemporalPeriodStartColumn] as bool? == true)
+                {
+                    yield return new Annotation(SqlServerAnnotationNames.IsTemporalPeriodStartColumn, true);
+                }
+
+                if (column[SqlServerAnnotationNames.IsTemporalPeriodEndColumn] as bool? == true)
+                {
+                    yield return new Annotation(SqlServerAnnotationNames.IsTemporalPeriodEndColumn, true);
+                }
+
+                yield return new Annotation(
+                    SqlServerAnnotationNames.TemporalHistoryTableName,
+                    column.Table[SqlServerAnnotationNames.TemporalHistoryTableName]);
+            }
+        }
     }
 }
