@@ -10158,6 +10158,279 @@ CROSS APPLY OPENJSON([c].[Json], N'$.items') AS [o]" });
 
         #endregion
 
+        //[ConditionalFact]
+        //public virtual void TemportalTest()
+        //{
+        //    //using (var ctx = new MyContext())
+        //    //{
+        //    //    ctx.Database.EnsureDeleted();
+        //    //    ctx.Database.EnsureCreated();
+
+        //    //    var p11 = new TemporalPost { Id = 11, Name = "p11" };
+        //    //    var p12 = new TemporalPost { Id = 12, Name = "p12" };
+        //    //    var p21 = new TemporalPost { Id = 21, Name = "p21" };
+        //    //    var p22 = new TemporalPost { Id = 22, Name = "p22" };
+        //    //    var p23 = new TemporalPost { Id = 23, Name = "p23" };
+
+        //    //    var b1 = new TemporalBlog { Id = 1, Name = "b1", Posts = new List<TemporalPost> { p11, p12 } };
+        //    //    var b2 = new TemporalBlog { Id = 2, Name = "b2", Posts = new List<TemporalPost> { p21, p22, p23 } };
+
+        //    //    ctx.Blogs.AddRange(b1, b2);
+        //    //    ctx.Posts.AddRange(p11, p12, p21, p22, p23);
+        //    //    ctx.SaveChanges();
+        //    //}
+
+        //    //Thread.Sleep(5000);
+        //    //var dateTime = DateTime.Now;
+        //    //Thread.Sleep(5000);
+
+
+        //    //using (var ctx = new MyContext())
+        //    //{
+        //    //    var b = ctx.Blogs.First();
+        //    //    b.Name = "Renamed";
+
+        //    //    ctx.SaveChanges();
+        //    //}
+
+        //    //throw new InvalidOperationException(dateTime.ToString());
+
+        //    using (var ctx = new MyContext())
+        //    {
+        //        var dateTime = DateTime.Parse("5/14/2021 11:42:40 PM");
+        //        //var dateTime = new DateTime(2020, 3, 18, 8, 0, 0);
+        //        //var query = ctx.Posts.TemporalAsOf(dateTime).Where(p => p.Blog.Name != "Foo").ToList();
+        //        var query = ctx.Blogs.TemporalAsOf(dateTime).Include(x => x.Posts).AsSplitQuery().ToList();
+        //    }
+        //}
+
+        //[ConditionalFact]
+        //public virtual void Temportal_set_ops()
+        //{
+        //    using (var ctx = new MyContext())
+        //    {
+        //        var dateTime = DateTime.Parse("5/14/2021 11:42:40 PM");
+        //        var dateTime2 = DateTime.Parse("5/14/2021 11:42:30 PM");
+        //        //var dateTime = new DateTime(2020, 3, 18, 8, 0, 0);
+        //        //var query = ctx.Posts.TemporalAsOf(dateTime).Where(p => p.Blog.Name != "Foo").ToList();
+        //        //var query = ctx.Blogs.TemporalAsOf(dateTime).Concat(ctx.Blogs.TemporalAsOf(dateTime2)).Include(x => x.Posts).ToList();
+        //        var query = ctx.Posts.TemporalAsOf(dateTime).Concat(ctx.Posts.TemporalAsOf(dateTime2)).Include(x => x.Blog).ToList();
+
+
+        //    }
+        //}
+
+        //[ConditionalFact]
+        //public virtual void Temportal_range_operation()
+        //{
+        //    using (var ctx = new MyContext())
+        //    {
+        //        var dateTime = DateTime.Parse("5/14/2021 11:42:40 PM");
+        //        var dateTime2 = DateTime.Parse("5/14/2021 11:42:30 PM");
+        //        //var dateTime = new DateTime(2020, 3, 18, 8, 0, 0);
+        //        //var query = ctx.Posts.TemporalAsOf(dateTime).Where(p => p.Blog.Name != "Foo").ToList();
+        //        //var query = ctx.Blogs.TemporalAsOf(dateTime).Concat(ctx.Blogs.TemporalAsOf(dateTime2)).Include(x => x.Posts).ToList();
+        //        var query1 = ctx.Posts.TemporalBetween(dateTime, dateTime2).ToList();
+        //        var query2 = ctx.Posts.TemporalContainedIn(dateTime, dateTime2).ToList();
+        //        var query3 = ctx.Posts.TemporalFromTo(dateTime, dateTime2).ToList();
+        //    }
+        //}
+
+        //[ConditionalFact]
+        //public virtual async Task TemportalTest_navigation_with_different_ops()
+        //{
+        //    using (var ctx = new MyContext())
+        //    {
+        //        var dateTime = DateTime.Parse("5/14/2021 11:42:40 PM");
+        //        //var dateTime = new DateTime(2020, 3, 18, 8, 0, 0);
+
+        //        await Assert.ThrowsAsync<InvalidOperationException>(() => ctx.Posts.TemporalAll().Where(p => p.Blog.Name != "Foo").ToListAsync());
+        //    }
+        //}
+
+        //public class MyContext : DbContext
+        //{
+        //    public DbSet<TemporalBlog> Blogs { get; set; }
+        //    public DbSet<TemporalPost> Posts { get; set; }
+
+        //    protected override void OnModelCreating(ModelBuilder modelBuilder)
+        //    {
+        //        // TODO: test negative when start and end are same property - we should throw!
+        //        //modelBuilder.Entity<TemporalBlog>().IsTemporal();// "Start", "End", "BlogHistory");
+
+        //        modelBuilder.Entity<TemporalBlog>().ToTable(tb => tb.IsTemporal());
+        //        modelBuilder.Entity<TemporalBlog>().Property(x => x.Id).ValueGeneratedNever();
+        //        modelBuilder.Entity<TemporalBlog>().Property(x => x.Id).HasColumnName("PeriodStart");
+
+        //        modelBuilder.Entity<TemporalPost>().ToTable(tb => tb.IsTemporal(ttb =>
+        //        {
+        //            ttb.HasPeriodStart("PerStart");
+        //            ttb.HasPeriodEnd("PerEnd");
+        //        }));
+
+        //        //modelBuilder.Entity<TemporalPost>().IsTemporal(x => x.PeriodStart, x => x.PeriodEnd);
+        //        modelBuilder.Entity<TemporalPost>().Property(x => x.Id).ValueGeneratedNever();
+
+        //        modelBuilder.Entity<TemporalBlog>().HasMany(x => x.Posts).WithOne(x => x.Blog).IsRequired();
+
+
+        //        //modelBuilder.Entity<TemporalCustomer>().IsTemporal();
+        //        modelBuilder.Entity<TemporalCustomer>().ToTable("Customers", tb => tb.IsTemporal());
+        //        modelBuilder.Entity<TemporalVipCustomer>().HasBaseType<TemporalCustomer>();
+        //        modelBuilder.Entity<TemporalVipCustomer2>().HasBaseType<TemporalCustomer>();
+        //    }
+
+        //    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        //    {
+        //        optionsBuilder.UseSqlServer(@"Server=(localdb)\mssqllocaldb;Database=TemporalRepro2;Trusted_Connection=True;MultipleActiveResultSets=true");
+        //    }
+        //}
+
+        //public class TemporalBlog
+        //{
+        //    public int Id { get; set; }
+        //    public string Name { get; set; }
+        //    public List<TemporalPost> Posts { get; set; }
+        //}
+
+        //public class TemporalPost
+        //{
+        //    public int Id { get; set; }
+        //    public string Name { get; set; }
+        //    public TemporalBlog Blog { get; set; }
+        //}
+
+        //public class TemporalCustomer
+        //{
+        //    public int Id { get; set; }
+        //    public string Name { get; set; }
+        //}
+
+        //public class TemporalVipCustomer : TemporalCustomer
+        //{
+        //    public decimal Discount { get; set; }
+        //}
+
+
+        //public class TemporalVipCustomer2 : TemporalCustomer
+        //{
+        //    public decimal Discount { get; set; }
+        //}
+
+
+
+
+
+        //[ConditionalFact]
+        //public virtual void TemportalFilteredTest()
+        //{
+        //    using (var ctx = new MyContextFiltered())
+        //    {
+        //        var dateTime = DateTime.Parse("5/14/2021 11:42:40 PM");
+        //        //var dateTime = new DateTime(2020, 3, 18, 8, 0, 0);
+        //        //var query = ctx.Posts.TemporalAsOf(dateTime).Where(p => p.Blog.Name != "Foo").ToList();
+        //        var query = ctx.Blogs.TemporalAsOf(dateTime).Where(b => b.Name != "Foo").ToList();
+        //    }
+        //}
+
+        //public class MyContextFiltered : MyContext
+        //{
+        //    protected override void OnModelCreating(ModelBuilder modelBuilder)
+        //    {
+        //        base.OnModelCreating(modelBuilder);
+
+        //        modelBuilder.Entity<TemporalBlog>().HasQueryFilter(bb => bb.Posts.Count() > 0);
+        //    }
+        //}
+
+
+
+
+        //public class MyContextTemporalNonTemporal : DbContext
+        //{
+        //    public DbSet<TemporalBlog> Blogs { get; set; }
+        //    public DbSet<TemporalPost> Posts { get; set; }
+
+        //    protected override void OnModelCreating(ModelBuilder modelBuilder)
+        //    {
+        //        // TODO: test negative when start and end are same property - we should throw!
+        //        //modelBuilder.Entity<TemporalBlog>().IsTemporal();// "Start", "End", "BlogHistory");
+
+        //        modelBuilder.Entity<TemporalBlog>().ToTable(tb => tb.IsTemporal());
+        //        modelBuilder.Entity<TemporalBlog>().Property(x => x.Id).ValueGeneratedNever();
+        //        modelBuilder.Entity<TemporalBlog>().Property(x => x.Id).HasColumnName("PeriodStart");
+
+        //        //modelBuilder.Entity<TemporalPost>().ToTable(tb => tb.IsTemporal(ttb =>
+        //        //{
+        //        //    ttb.HasPeriodStart("PerStart");
+        //        //    ttb.HasPeriodEnd("PerEnd");
+        //        //}));
+
+        //        modelBuilder.Entity<TemporalPost>().Property(x => x.Id).ValueGeneratedNever();
+        //        modelBuilder.Entity<TemporalBlog>().HasMany(x => x.Posts).WithOne(x => x.Blog).IsRequired();
+        //    }
+
+        //    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        //    {
+        //        optionsBuilder.UseSqlServer(@"Server=(localdb)\mssqllocaldb;Database=TemporalReproTemporalNonTemporal;Trusted_Connection=True;MultipleActiveResultSets=true");
+        //    }
+        //}
+
+
+
+
+
+
+
+
+
+
+        //[ConditionalFact]
+        //public virtual void TemporalTest_M2M()
+        //{
+        //    using (var ctx = new TemporalManyToManyContext())
+        //    {
+        //        ctx.Database.EnsureDeleted();
+        //        ctx.Database.EnsureCreated();
+        //    }
+
+        //    using (var ctx = new TemporalManyToManyContext())
+        //    {
+        //        var query = ctx.Ones.TemporalAsOf(new DateTime(2000, 1, 1)).Include(x => x.Twos).ToList();
+        //    }
+        //}
+
+        //public class EntityOne_M2M
+        //{
+        //    public int Id { get; set; }
+        //    public string Name { get; set; }
+        //    public List<EntityTwo_M2M> Twos { get; set; }
+        //}
+
+        //public class EntityTwo_M2M
+        //{
+        //    public int Id { get; set; }
+        //    public string Name { get; set; }
+        //    public List<EntityOne_M2M> Ones { get; set; }
+        //}
+
+        //public class TemporalManyToManyContext : DbContext
+        //{
+        //    public DbSet<EntityOne_M2M> Ones { get; set; }
+        //    public DbSet<EntityTwo_M2M> Twos { get; set; }
+
+        //    protected override void OnModelCreating(ModelBuilder modelBuilder)
+        //    {
+        //        modelBuilder.Entity<EntityOne_M2M>().ToTable(tb => tb.IsTemporal());
+        //        modelBuilder.Entity<EntityTwo_M2M>().ToTable(tb => tb.IsTemporal());
+        //    }
+
+        //    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        //    {
+        //        optionsBuilder.UseSqlServer(@"Server=(localdb)\mssqllocaldb;Database=ReproTemporalMany2Many;Trusted_Connection=True;MultipleActiveResultSets=true");
+        //    }
+        //}
+
         protected override string StoreName => "QueryBugsTest";
         protected TestSqlLoggerFactory TestSqlLoggerFactory
             => (TestSqlLoggerFactory)ListLoggerFactory;

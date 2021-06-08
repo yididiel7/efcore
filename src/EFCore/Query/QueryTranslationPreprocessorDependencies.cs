@@ -52,16 +52,24 @@ namespace Microsoft.EntityFrameworkCore.Query
         /// </summary>
         [EntityFrameworkInternal]
         public QueryTranslationPreprocessorDependencies(
-            IEvaluatableExpressionFilter evaluatableExpressionFilter)
+            IEvaluatableExpressionFilter evaluatableExpressionFilter,
+            IQueryRootCreator queryRootCreator)
         {
             Check.NotNull(evaluatableExpressionFilter, nameof(evaluatableExpressionFilter));
+            Check.NotNull(queryRootCreator, nameof(queryRootCreator));
 
             EvaluatableExpressionFilter = evaluatableExpressionFilter;
+            QueryRootCreator = queryRootCreator;
         }
 
         /// <summary>
         ///     Evaluatable expression filter.
         /// </summary>
         public IEvaluatableExpressionFilter EvaluatableExpressionFilter { get; init; }
+
+        /// <summary>
+        ///     Query root creator.
+        /// </summary>
+        public IQueryRootCreator QueryRootCreator { get; init; }
     }
 }

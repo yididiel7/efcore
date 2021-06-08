@@ -58,6 +58,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
         private readonly RemoveRedundantNavigationComparisonExpressionVisitor _removeRedundantNavigationComparisonExpressionVisitor;
         private readonly HashSet<string> _parameterNames = new();
         private readonly ParameterExtractingExpressionVisitor _parameterExtractingExpressionVisitor;
+        private readonly IQueryRootCreator _queryRootCreator;
         private readonly HashSet<IEntityType> _nonCyclicAutoIncludeEntityTypes;
 
         private readonly Dictionary<IEntityType, LambdaExpression> _parameterizedQueryFilterPredicateCache
@@ -74,11 +75,13 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
         public NavigationExpandingExpressionVisitor(
             QueryTranslationPreprocessor queryTranslationPreprocessor,
             QueryCompilationContext queryCompilationContext,
-            IEvaluatableExpressionFilter evaluatableExpressionFilter)
+            IEvaluatableExpressionFilter evaluatableExpressionFilter,
+            IQueryRootCreator queryRootCreator)
         {
             _queryTranslationPreprocessor = queryTranslationPreprocessor;
             _queryCompilationContext = queryCompilationContext;
-            _pendingSelectorExpandingExpressionVisitor = new PendingSelectorExpandingExpressionVisitor(this);
+            _queryRootCreator = queryRootCreator;
+            _pendingSelectorExpandingExpressionVisitor = new PendingSelectorExpandingExpressionVisitor(this, queryRootCreator);
             _subqueryMemberPushdownExpressionVisitor = new SubqueryMemberPushdownExpressionVisitor(queryCompilationContext.Model);
             _nullCheckRemovingExpressionVisitor = new NullCheckRemovingExpressionVisitor();
             _reducingExpressionVisitor = new ReducingExpressionVisitor();
@@ -108,7 +111,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
         public virtual Expression Expand(Expression query)
         {
             var result = Visit(query);
-            result = new PendingSelectorExpandingExpressionVisitor(this, applyIncludes: true).Visit(result);
+            result = new PendingSelectorExpandingExpressionVisitor(this, _queryRootCreator, applyIncludes: true).Visit(result);
             result = Reduce(result);
 
             var dbContextOnQueryContextPropertyAccess =
@@ -169,6 +172,8 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                         processedDefiningQueryBody = Visit(processedDefiningQueryBody);
                         processedDefiningQueryBody = _pendingSelectorExpandingExpressionVisitor.Visit(processedDefiningQueryBody);
                         processedDefiningQueryBody = Reduce(processedDefiningQueryBody);
+
+                        // TODO: this is a problem
                         navigationExpansionExpression = CreateNavigationExpansionExpression(processedDefiningQueryBody, entityType);
                     }
                     else
@@ -225,7 +230,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                 // due to SubqueryMemberPushdown, this may be collection navigation which was not pushed down
                 navigationExpansionExpression =
                     (NavigationExpansionExpression)_pendingSelectorExpandingExpressionVisitor.Visit(navigationExpansionExpression);
-                var expandedExpression = new ExpandingExpressionVisitor(this, navigationExpansionExpression).Visit(updatedExpression);
+                var expandedExpression = new ExpandingExpressionVisitor(this, navigationExpansionExpression, _queryRootCreator).Visit(updatedExpression);
                 if (expandedExpression != updatedExpression)
                 {
                     updatedExpression = Visit(expandedExpression);
@@ -689,7 +694,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                 && entityReference.EntityType.GetAllBaseTypes().Concat(entityReference.EntityType.GetDerivedTypesInclusive())
                     .FirstOrDefault(et => et.ClrType == castType) is IEntityType castEntityType)
             {
-                var newEntityReference = new EntityReference(castEntityType);
+                var newEntityReference = new EntityReference(castEntityType, entityReference.QueryRootExpression);
                 if (entityReference.IsOptional)
                 {
                     newEntityReference.MarkAsOptional();
@@ -1086,7 +1091,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                 source.PendingSelector,
                 keySelector.Body);
 
-            lambdaBody = new ExpandingExpressionVisitor(this, source).Visit(lambdaBody);
+            lambdaBody = new ExpandingExpressionVisitor(this, source, _queryRootCreator).Visit(lambdaBody);
             lambdaBody = _subqueryMemberPushdownExpressionVisitor.Visit(lambdaBody);
 
             if (thenBy)
@@ -1215,10 +1220,12 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
             innerSource = (NavigationExpansionExpression)_pendingSelectorExpandingExpressionVisitor.Visit(innerSource);
             var innerTreeStructure = SnapshotExpression(innerSource.PendingSelector);
 
-            if (!CompareIncludes(outerTreeStructure, innerTreeStructure))
-            {
-                throw new InvalidOperationException(CoreStrings.SetOperationWithDifferentIncludesInOperands);
-            }
+            ValidateExpressionCompatibility(outerTreeStructure, innerTreeStructure);
+
+            //if (!CompareIncludes(outerTreeStructure, innerTreeStructure))
+            //{
+            //    throw new InvalidOperationException(CoreStrings.SetOperationWithDifferentIncludesInOperands);
+            //}
 
             var outerQueryable = Reduce(outerSource);
             var innerQueryable = Reduce(innerSource);
@@ -1457,12 +1464,20 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
             return navigationExpansionExpression;
         }
 
-        private bool CompareIncludes(Expression outer, Expression inner)
+        private void ValidateExpressionCompatibility(Expression outer, Expression inner)
         {
             if (outer is EntityReference outerEntityReference
                 && inner is EntityReference innerEntityReference)
             {
-                return outerEntityReference.IncludePaths.Equals(innerEntityReference.IncludePaths);
+                if (!outerEntityReference.IncludePaths.Equals(innerEntityReference.IncludePaths))
+                {
+                    throw new InvalidOperationException(CoreStrings.SetOperationWithDifferentIncludesInOperands);
+                }
+
+                if (!_queryRootCreator.AreCompatible(outerEntityReference.QueryRootExpression, innerEntityReference.QueryRootExpression))
+                {
+                    throw new InvalidOperationException("Incompatible sources used for set operation.");
+                }
             }
 
             if (outer is NewExpression outerNewExpression
@@ -1470,24 +1485,54 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
             {
                 if (outerNewExpression.Arguments.Count != innerNewExpression.Arguments.Count)
                 {
-                    return false;
+                    throw new InvalidOperationException(CoreStrings.SetOperationWithDifferentIncludesInOperands);
                 }
 
                 for (var i = 0; i < outerNewExpression.Arguments.Count; i++)
                 {
-                    if (!CompareIncludes(outerNewExpression.Arguments[i], innerNewExpression.Arguments[i]))
-                    {
-                        return false;
-                    }
+                    ValidateExpressionCompatibility(outerNewExpression.Arguments[i], innerNewExpression.Arguments[i]);
                 }
-
-                return true;
             }
 
-            return outer is DefaultExpression outerDefaultExpression
+            if (outer is DefaultExpression outerDefaultExpression
                 && inner is DefaultExpression innerDefaultExpression
-                && outerDefaultExpression.Type == innerDefaultExpression.Type;
+                && outerDefaultExpression.Type != innerDefaultExpression.Type)
+            {
+                throw new InvalidOperationException(CoreStrings.SetOperationWithDifferentIncludesInOperands);
+            }
         }
+
+        //private bool CompareIncludes(Expression outer, Expression inner)
+        //{
+        //    if (outer is EntityReference outerEntityReference
+        //        && inner is EntityReference innerEntityReference)
+        //    {
+        //        return outerEntityReference.IncludePaths.Equals(innerEntityReference.IncludePaths);
+        //    }
+
+        //    if (outer is NewExpression outerNewExpression
+        //        && inner is NewExpression innerNewExpression)
+        //    {
+        //        if (outerNewExpression.Arguments.Count != innerNewExpression.Arguments.Count)
+        //        {
+        //            return false;
+        //        }
+
+        //        for (var i = 0; i < outerNewExpression.Arguments.Count; i++)
+        //        {
+        //            if (!CompareIncludes(outerNewExpression.Arguments[i], innerNewExpression.Arguments[i]))
+        //            {
+        //                return false;
+        //            }
+        //        }
+
+        //        return true;
+        //    }
+
+        //    return outer is DefaultExpression outerDefaultExpression
+        //        && inner is DefaultExpression innerDefaultExpression
+        //        && outerDefaultExpression.Type == innerDefaultExpression.Type;
+        //}
 
         private MethodCallExpression ConvertToEnumerable(MethodInfo queryableMethod, IEnumerable<Expression> arguments)
         {
@@ -1614,7 +1659,11 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
             Expression sourceExpression,
             IEntityType entityType)
         {
-            var entityReference = new EntityReference(entityType);
+            // if sourceExpression is not a query root we will throw when trying to construct temporal root expression
+            // regular queries don't use the query root so they will still be fine
+            // TODO: can this happen only for defining query scenarios?
+            // if so, this is not a problem, since temporal tables are not supported for these
+            var entityReference = new EntityReference(entityType, sourceExpression as QueryRootExpression);
             PopulateEagerLoadedNavigations(entityReference.IncludePaths);
 
             var currentTree = new NavigationTreeExpression(entityReference);
@@ -1637,7 +1686,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
         private Expression ExpandNavigationsForSource(NavigationExpansionExpression source, Expression expression)
         {
             expression = _removeRedundantNavigationComparisonExpressionVisitor.Visit(expression);
-            expression = new ExpandingExpressionVisitor(this, source).Visit(expression);
+            expression = new ExpandingExpressionVisitor(this, source, _queryRootCreator).Visit(expression);
             expression = _subqueryMemberPushdownExpressionVisitor.Visit(expression);
             expression = Visit(expression);
             expression = _pendingSelectorExpandingExpressionVisitor.Visit(expression);

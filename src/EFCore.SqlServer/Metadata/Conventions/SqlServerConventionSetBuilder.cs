@@ -3,6 +3,7 @@
 
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions.Infrastructure;
+using Microsoft.EntityFrameworkCore.SqlServer.Metadata.Conventions;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -64,9 +65,10 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
             ReplaceConvention(
                 conventionSet.EntityTypeAnnotationChangedConventions, (RelationalValueGenerationConvention)valueGenerationConvention);
 
+            var sqlServerTemporalConvention = new SqlServerTemporalConvention();
             ConventionSet.AddBefore(
                 conventionSet.EntityTypeAnnotationChangedConventions,
-                new SqlServerTemporalConvention(),
+                sqlServerTemporalConvention,
                 typeof(SqlServerValueGenerationConvention));
 
             ReplaceConvention(conventionSet.EntityTypePrimaryKeyChangedConventions, valueGenerationConvention);
@@ -106,9 +108,21 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
                 (SharedTableConvention)new SqlServerSharedTableConvention(Dependencies, RelationalDependencies));
             conventionSet.ModelFinalizingConventions.Add(new SqlServerDbFunctionConvention(Dependencies, RelationalDependencies));
 
+            //var manyToManyJoinEntityTypeConvention = new SqlServerManyToManyJoinEntityTypeConvention(Dependencies);
+            //ReplaceConvention(
+            //    conventionSet.SkipNavigationAddedConventions,
+            //    (ManyToManyJoinEntityTypeConvention)manyToManyJoinEntityTypeConvention);
+
+            //ReplaceConvention(
+            //    conventionSet.SkipNavigationInverseChangedConventions,
+            //    (ManyToManyJoinEntityTypeConvention)manyToManyJoinEntityTypeConvention);
+
             ReplaceConvention(
                 conventionSet.ModelFinalizedConventions,
                 (RuntimeModelConvention)new SqlServerRuntimeModelConvention(Dependencies, RelationalDependencies));
+
+            //conventionSet.ModelFinalizingConventions.Add(sqlServerTemporalConvention);
+            conventionSet.SkipNavigationForeignKeyChangedConventions.Add(sqlServerTemporalConvention);
 
             return conventionSet;
         }

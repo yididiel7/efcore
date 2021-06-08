@@ -8796,7 +8796,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                 });
         }
 
-        [ConditionalTheory]
+        [ConditionalTheory(Skip = "#24507")]
         [MemberData(nameof(IsAsyncData))]
         public virtual Task Where_DateOnly_Year(bool async)
         {
@@ -8806,7 +8806,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                 entryCount: 1);
         }
 
-        [ConditionalTheory]
+        [ConditionalTheory(Skip = "#24507")]
         [MemberData(nameof(IsAsyncData))]
         public virtual Task Where_DateOnly_Month(bool async)
         {
@@ -8816,7 +8816,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                 entryCount: 1);
         }
 
-        [ConditionalTheory]
+        [ConditionalTheory(Skip = "#24507")]
         [MemberData(nameof(IsAsyncData))]
         public virtual Task Where_DateOnly_Day(bool async)
         {
@@ -8826,7 +8826,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                 entryCount: 1);
         }
 
-        [ConditionalTheory]
+        [ConditionalTheory(Skip = "#24507")]
         [MemberData(nameof(IsAsyncData))]
         public virtual Task Where_DateOnly_DayOfYear(bool async)
         {
@@ -8836,7 +8836,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                 entryCount: 1);
         }
 
-        [ConditionalTheory]
+        [ConditionalTheory(Skip = "#24507")]
         [MemberData(nameof(IsAsyncData))]
         public virtual Task Where_DateOnly_DayOfWeek(bool async)
         {
@@ -8846,7 +8846,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                 entryCount: 1);
         }
 
-        [ConditionalTheory]
+        [ConditionalTheory(Skip = "#24507")]
         [MemberData(nameof(IsAsyncData))]
         public virtual Task Where_DateOnly_AddYears(bool async)
         {
@@ -8856,7 +8856,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                 entryCount: 1);
         }
 
-        [ConditionalTheory]
+        [ConditionalTheory(Skip = "#24507")]
         [MemberData(nameof(IsAsyncData))]
         public virtual Task Where_DateOnly_AddMonths(bool async)
         {
@@ -8866,7 +8866,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                 entryCount: 1);
         }
 
-        [ConditionalTheory]
+        [ConditionalTheory(Skip = "#24507")]
         [MemberData(nameof(IsAsyncData))]
         public virtual Task Where_DateOnly_AddDays(bool async)
         {
@@ -8876,7 +8876,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                 entryCount: 1);
         }
 
-        [ConditionalTheory]
+        [ConditionalTheory(Skip = "#24507")]
         [MemberData(nameof(IsAsyncData))]
         public virtual Task Where_TimeOnly_Hour(bool async)
         {
@@ -8886,7 +8886,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                 entryCount: 1);
         }
 
-        [ConditionalTheory]
+        [ConditionalTheory(Skip = "#24507")]
         [MemberData(nameof(IsAsyncData))]
         public virtual Task Where_TimeOnly_Minute(bool async)
         {
@@ -8896,7 +8896,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                 entryCount: 1);
         }
 
-        [ConditionalTheory]
+        [ConditionalTheory(Skip = "#24507")]
         [MemberData(nameof(IsAsyncData))]
         public virtual Task Where_TimeOnly_Second(bool async)
         {
@@ -8906,7 +8906,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                 entryCount: 1);
         }
 
-        [ConditionalTheory]
+        [ConditionalTheory(Skip = "#24507")]
         [MemberData(nameof(IsAsyncData))]
         public virtual Task Where_TimeOnly_Millisecond(bool async)
         {
@@ -8916,7 +8916,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                 entryCount: 1);
         }
 
-        [ConditionalTheory]
+        [ConditionalTheory(Skip = "#24507")]
         [MemberData(nameof(IsAsyncData))]
         public virtual Task Where_TimeOnly_AddHours(bool async)
         {
@@ -8926,7 +8926,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                 entryCount: 1);
         }
 
-        [ConditionalTheory]
+        [ConditionalTheory(Skip = "#24507")]
         [MemberData(nameof(IsAsyncData))]
         public virtual Task Where_TimeOnly_AddMinutes(bool async)
         {
@@ -8936,7 +8936,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                 entryCount: 1);
         }
 
-        [ConditionalTheory]
+        [ConditionalTheory(Skip = "#24507")]
         [MemberData(nameof(IsAsyncData))]
         public virtual Task Where_TimeOnly_Add_TimeSpan(bool async)
         {
@@ -8946,7 +8946,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                 entryCount: 1);
         }
 
-        [ConditionalTheory]
+        [ConditionalTheory(Skip = "#24507")]
         [MemberData(nameof(IsAsyncData))]
         public virtual Task Where_TimeOnly_IsBetween(bool async)
         {
@@ -8956,7 +8956,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                 entryCount: 1);
         }
 
-        [ConditionalTheory]
+        [ConditionalTheory(Skip = "#24507")]
         [MemberData(nameof(IsAsyncData))]
         public virtual Task Where_TimeOnly_subtract_TimeOnly(bool async)
         {
@@ -8964,6 +8964,15 @@ namespace Microsoft.EntityFrameworkCore.Query
                 async,
                 ss => ss.Set<Mission>().Where(m => m.Time - new TimeOnly(10, 0, 0) == new TimeSpan(0, 0, 15, 50, 500)).AsTracking(),
                 entryCount: 1);
+        }
+
+        [ConditionalTheory]
+        [MemberData(nameof(IsAsyncData))]
+        public virtual Task Basic_query_gears(bool async)
+        {
+            return AssertQuery(
+                async,
+                ss => ss.Set<Gear>());
         }
 
         protected GearsOfWarContext CreateContext()
