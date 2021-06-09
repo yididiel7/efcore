@@ -1228,7 +1228,7 @@ namespace Microsoft.EntityFrameworkCore
             var scopedProvider = serviceScope.ServiceProvider;
 
             var context1 = useInterface
-                ? (DbContext)scopedProvider.GetService<IPooledContext>()
+                ? (PooledContext)scopedProvider.GetService<IPooledContext>()
                 : scopedProvider.GetService<PooledContext>();
 
             Assert.Null(context1!.Database.GetCommandTimeout());
@@ -1245,24 +1245,38 @@ namespace Microsoft.EntityFrameworkCore
             context1.SavedChanges += (sender, args) => { };
             context1.SaveChangesFailed += (sender, args) => { };
 
-            Assert.NotNull(GetContextEventField(context1, nameof(DbContext.SavingChanges)));
-            Assert.NotNull(GetContextEventField(context1, nameof(DbContext.SavedChanges)));
-            Assert.NotNull(GetContextEventField(context1, nameof(DbContext.SaveChangesFailed)));
+            var originalLeasedFromPool = GetContextEventField(context1, nameof(DbContext.LeasedFromPool));
+            var leasedCalled = false;
+            context1.LeasedFromPool += (sender, args) => { leasedCalled = true; };
+            Assert.NotSame(originalLeasedFromPool, GetContextEventField(context1, nameof(DbContext.LeasedFromPool)));
+
+            var originalReturnedToPool = GetContextEventField(context1, nameof(DbContext.ReturnedToPool));
+            var returnedCalled = false;
+            context1.ReturnedToPool += (sender, args) => { returnedCalled = true; };
+            Assert.NotSame(originalReturnedToPool, GetContextEventField(context1, nameof(DbContext.ReturnedToPool)));
 
             await Dispose(serviceScope, async);
-
-            Assert.NotNull(GetContextEventField(context1, nameof(DbContext.SavingChanges)));
-            Assert.NotNull(GetContextEventField(context1, nameof(DbContext.SavedChanges)));
-            Assert.NotNull(GetContextEventField(context1, nameof(DbContext.SaveChangesFailed)));
 
             serviceScope = serviceProvider.CreateScope();
             scopedProvider = serviceScope.ServiceProvider;
 
             var context2 = useInterface
-                ? (DbContext)scopedProvider.GetService<IPooledContext>()
+                ? (PooledContext)scopedProvider.GetService<IPooledContext>()
                 : scopedProvider.GetService<PooledContext>();
 
             Assert.Same(context1, context2);
+
+            Assert.Null(GetContextEventField(context2, nameof(DbContext.SavingChanges)));
+            Assert.Null(GetContextEventField(context2, nameof(DbContext.SavedChanges)));
+            Assert.Null(GetContextEventField(context2, nameof(DbContext.SaveChangesFailed)));
+            Assert.NotNull(GetContextEventField(context2, nameof(DbContext.LeasedFromPool)));
+            Assert.NotNull(GetContextEventField(context2, nameof(DbContext.ReturnedToPool)));
+            Assert.Same(originalLeasedFromPool, GetContextEventField(context2, nameof(DbContext.LeasedFromPool)));
+            Assert.Same(originalReturnedToPool, GetContextEventField(context2, nameof(DbContext.ReturnedToPool)));
+            Assert.True(leasedCalled);
+            Assert.True(returnedCalled);
+            Assert.Equal(2, context2.LeasedCount);
+            Assert.Equal(1, context2.ReturnedCount);
 
             Assert.False(context2!.ChangeTracker.AutoDetectChangesEnabled);
             Assert.False(context2.ChangeTracker.LazyLoadingEnabled);
@@ -1296,27 +1310,42 @@ namespace Microsoft.EntityFrameworkCore
             context1.SavedChanges += (sender, args) => { };
             context1.SaveChangesFailed += (sender, args) => { };
 
-            Assert.NotNull(GetContextEventField(context1, nameof(DbContext.SavingChanges)));
-            Assert.NotNull(GetContextEventField(context1, nameof(DbContext.SavedChanges)));
-            Assert.NotNull(GetContextEventField(context1, nameof(DbContext.SaveChangesFailed)));
+            var originalLeasedFromPool = GetContextEventField(context1, nameof(DbContext.LeasedFromPool));
+            var leasedCalled = false;
+            context1.LeasedFromPool += (sender, args) => { leasedCalled = true; };
+            Assert.NotSame(originalLeasedFromPool, GetContextEventField(context1, nameof(DbContext.LeasedFromPool)));
+
+            var originalReturnedToPool = GetContextEventField(context1, nameof(DbContext.ReturnedToPool));
+            var returnedCalled = false;
+            context1.ReturnedToPool += (sender, args) => { returnedCalled = true; };
+            Assert.NotSame(originalReturnedToPool, GetContextEventField(context1, nameof(DbContext.ReturnedToPool)));
 
             await Dispose(context1, async);
-
-            Assert.NotNull(GetContextEventField(context1, nameof(DbContext.SavingChanges)));
-            Assert.NotNull(GetContextEventField(context1, nameof(DbContext.SavedChanges)));
-            Assert.NotNull(GetContextEventField(context1, nameof(DbContext.SaveChangesFailed)));
 
             var context2 = async ? await factory.CreateDbContextAsync() : factory.CreateDbContext();
 
             Assert.Same(context1, context2);
 
-            Assert.False(context2.ChangeTracker.AutoDetectChangesEnabled);
+            Assert.Null(GetContextEventField(context2, nameof(DbContext.SavingChanges)));
+            Assert.Null(GetContextEventField(context2, nameof(DbContext.SavedChanges)));
+            Assert.Null(GetContextEventField(context2, nameof(DbContext.SaveChangesFailed)));
+            Assert.NotNull(GetContextEventField(context2, nameof(DbContext.LeasedFromPool)));
+            Assert.NotNull(GetContextEventField(context2, nameof(DbContext.ReturnedToPool)));
+            Assert.Same(originalLeasedFromPool, GetContextEventField(context2, nameof(DbContext.LeasedFromPool)));
+            Assert.Same(originalReturnedToPool, GetContextEventField(context2, nameof(DbContext.ReturnedToPool)));
+            Assert.True(leasedCalled);
+            Assert.True(returnedCalled);
+            Assert.Equal(2, context2.LeasedCount);
+            Assert.Equal(1, context2.ReturnedCount);
+
+            Assert.False(context2!.ChangeTracker.AutoDetectChangesEnabled);
             Assert.False(context2.ChangeTracker.LazyLoadingEnabled);
             Assert.Equal(QueryTrackingBehavior.TrackAll, context2.ChangeTracker.QueryTrackingBehavior);
             Assert.Equal(CascadeTiming.Never, context2.ChangeTracker.CascadeDeleteTiming);
             Assert.Equal(CascadeTiming.Never, context2.ChangeTracker.DeleteOrphansTiming);
             Assert.False(context2.Database.AutoTransactionsEnabled);
             Assert.False(context2.Database.AutoSavepointsEnabled);
+            Assert.Null(context1.Database.GetCommandTimeout());
         }
 
         [ConditionalFact]

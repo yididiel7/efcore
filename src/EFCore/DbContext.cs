@@ -46,8 +46,6 @@ namespace Microsoft.EntityFrameworkCore
     ///     </para>
     /// </remarks>
     public class DbContext :
-        IDisposable,
-        IAsyncDisposable,
         IInfrastructure<IServiceProvider>,
         IDbContextDependencies,
         IDbSetCache,
@@ -475,9 +473,9 @@ namespace Microsoft.EntityFrameworkCore
         ///         Saves all changes made in this context to the database.
         ///     </para>
         ///     <para>
-        ///         This method will automatically call <see cref="ChangeTracker.DetectChanges" /> to discover any
+        ///         This method will automatically call <see cref="ChangeTracking.ChangeTracker.DetectChanges" /> to discover any
         ///         changes to entity instances before saving to the underlying database. This can be disabled via
-        ///         <see cref="ChangeTracker.AutoDetectChangesEnabled" />.
+        ///         <see cref="ChangeTracking.ChangeTracker.AutoDetectChangesEnabled" />.
         ///     </para>
         /// </summary>
         /// <returns>
@@ -499,13 +497,13 @@ namespace Microsoft.EntityFrameworkCore
         ///         Saves all changes made in this context to the database.
         ///     </para>
         ///     <para>
-        ///         This method will automatically call <see cref="ChangeTracker.DetectChanges" /> to discover any
+        ///         This method will automatically call <see cref="ChangeTracking.ChangeTracker.DetectChanges" /> to discover any
         ///         changes to entity instances before saving to the underlying database. This can be disabled via
-        ///         <see cref="ChangeTracker.AutoDetectChangesEnabled" />.
+        ///         <see cref="ChangeTracking.ChangeTracker.AutoDetectChangesEnabled" />.
         ///     </para>
         /// </summary>
         /// <param name="acceptAllChangesOnSuccess">
-        ///     Indicates whether <see cref="ChangeTracker.AcceptAllChanges" /> is called after the changes have
+        ///     Indicates whether <see cref="ChangeTracking.ChangeTracker.AcceptAllChanges" /> is called after the changes have
         ///     been sent successfully to the database.
         /// </param>
         /// <returns>
@@ -582,9 +580,9 @@ namespace Microsoft.EntityFrameworkCore
         ///         Saves all changes made in this context to the database.
         ///     </para>
         ///     <para>
-        ///         This method will automatically call <see cref="ChangeTracker.DetectChanges" /> to discover any
+        ///         This method will automatically call <see cref="ChangeTracking.ChangeTracker.DetectChanges" /> to discover any
         ///         changes to entity instances before saving to the underlying database. This can be disabled via
-        ///         <see cref="ChangeTracker.AutoDetectChangesEnabled" />.
+        ///         <see cref="ChangeTracking.ChangeTracker.AutoDetectChangesEnabled" />.
         ///     </para>
         ///     <para>
         ///         Multiple active operations on the same context instance are not supported.  Use <see langword="await" /> to ensure
@@ -613,9 +611,9 @@ namespace Microsoft.EntityFrameworkCore
         ///         Saves all changes made in this context to the database.
         ///     </para>
         ///     <para>
-        ///         This method will automatically call <see cref="ChangeTracker.DetectChanges" /> to discover any
+        ///         This method will automatically call <see cref="ChangeTracking.ChangeTracker.DetectChanges" /> to discover any
         ///         changes to entity instances before saving to the underlying database. This can be disabled via
-        ///         <see cref="ChangeTracker.AutoDetectChangesEnabled" />.
+        ///         <see cref="ChangeTracking.ChangeTracker.AutoDetectChangesEnabled" />.
         ///     </para>
         ///     <para>
         ///         Multiple active operations on the same context instance are not supported.  Use <see langword="await" /> to ensure
@@ -623,7 +621,7 @@ namespace Microsoft.EntityFrameworkCore
         ///     </para>
         /// </summary>
         /// <param name="acceptAllChangesOnSuccess">
-        ///     Indicates whether <see cref="ChangeTracker.AcceptAllChanges" /> is called after the changes have
+        ///     Indicates whether <see cref="ChangeTracking.ChangeTracker.AcceptAllChanges" /> is called after the changes have
         ///     been sent successfully to the database.
         /// </param>
         /// <param name="cancellationToken"> A <see cref="CancellationToken" /> to observe while waiting for the task to complete. </param>
@@ -733,7 +731,7 @@ namespace Microsoft.EntityFrameworkCore
         protected virtual Task OnLeasedFromPoolAsync(CancellationToken cancellationToken)
         {
             LeasedFromPool?.Invoke(this, EventArgs.Empty);
-            
+
             return Task.CompletedTask;
         }
 
@@ -765,7 +763,7 @@ namespace Microsoft.EntityFrameworkCore
         protected virtual Task OnReturnedToPoolAsync(CancellationToken cancellationToken)
         {
             ReturnedToPool?.Invoke(this, EventArgs.Empty);
-            
+
             return Task.CompletedTask;
         }
 
@@ -789,8 +787,13 @@ namespace Microsoft.EntityFrameworkCore
         void IDbContextPoolable.SetLease(DbContextLease lease)
         {
             SetLeaseInternal(lease);
-            
+
             OnLeasedFromPool();
+
+            if (_configurationSnapshot != null)
+            {
+                LeasedFromPool = _configurationSnapshot.LeasedFromPool;
+            }
         }
 
         /// <summary>
@@ -800,51 +803,44 @@ namespace Microsoft.EntityFrameworkCore
         ///     doing so can result in application failures when updating to a new Entity Framework Core release.
         /// </summary>
         [EntityFrameworkInternal]
-        Task IDbContextPoolable.SetLeaseAsync(DbContextLease lease, CancellationToken cancellationToken)
+        async Task IDbContextPoolable.SetLeaseAsync(DbContextLease lease, CancellationToken cancellationToken)
         {
             SetLeaseInternal(lease);
-            
-            return OnLeasedFromPoolAsync(cancellationToken);
+
+            await OnLeasedFromPoolAsync(cancellationToken);
+
+            if (_configurationSnapshot != null)
+            {
+                LeasedFromPool = _configurationSnapshot.LeasedFromPool;
+            }
         }
-        
+
         private void SetLeaseInternal(DbContextLease lease)
         {
             _lease = lease;
             _disposed = false;
             ++_leaseCount;
 
-            if (_configurationSnapshot?.AutoDetectChangesEnabled != null)
+            if (_configurationSnapshot == null)
             {
-                Check.DebugAssert(
-                    _configurationSnapshot.QueryTrackingBehavior.HasValue, "!configurationSnapshot.QueryTrackingBehavior.HasValue");
-                Check.DebugAssert(_configurationSnapshot.LazyLoadingEnabled.HasValue, "!configurationSnapshot.LazyLoadingEnabled.HasValue");
-                Check.DebugAssert(
-                    _configurationSnapshot.CascadeDeleteTiming.HasValue, "!configurationSnapshot.CascadeDeleteTiming.HasValue");
-                Check.DebugAssert(
-                    _configurationSnapshot.DeleteOrphansTiming.HasValue, "!configurationSnapshot.DeleteOrphansTiming.HasValue");
-
-                var changeTracker = ChangeTracker;
-                changeTracker.AutoDetectChangesEnabled = _configurationSnapshot.AutoDetectChangesEnabled.Value;
-                changeTracker.QueryTrackingBehavior = _configurationSnapshot.QueryTrackingBehavior.Value;
-                changeTracker.LazyLoadingEnabled = _configurationSnapshot.LazyLoadingEnabled.Value;
-                changeTracker.CascadeDeleteTiming = _configurationSnapshot.CascadeDeleteTiming.Value;
-                changeTracker.DeleteOrphansTiming = _configurationSnapshot.DeleteOrphansTiming.Value;
-            }
-            else
-            {
-                ((IResettableService?)_changeTracker)?.ResetState();
+                return;
             }
 
-            if (_database != null)
-            {
-                _database.AutoTransactionsEnabled
-                    = _configurationSnapshot?.AutoTransactionsEnabled == null
-                    || _configurationSnapshot.AutoTransactionsEnabled.Value;
+            var changeTracker = ChangeTracker;
+            changeTracker.AutoDetectChangesEnabled = _configurationSnapshot.AutoDetectChangesEnabled;
+            changeTracker.QueryTrackingBehavior = _configurationSnapshot.QueryTrackingBehavior;
+            changeTracker.LazyLoadingEnabled = _configurationSnapshot.LazyLoadingEnabled;
+            changeTracker.CascadeDeleteTiming = _configurationSnapshot.CascadeDeleteTiming;
+            changeTracker.DeleteOrphansTiming = _configurationSnapshot.DeleteOrphansTiming;
 
-                _database.AutoSavepointsEnabled
-                    = _configurationSnapshot?.AutoSavepointsEnabled == null
-                    || _configurationSnapshot.AutoSavepointsEnabled.Value;
-            }
+            var database = Database;
+            database.AutoTransactionsEnabled = _configurationSnapshot.AutoTransactionsEnabled;
+            database.AutoSavepointsEnabled = _configurationSnapshot.AutoSavepointsEnabled;
+
+            SavingChanges = _configurationSnapshot.SavingChanges;
+            SavedChanges = _configurationSnapshot.SavedChanges;
+            SaveChangesFailed = _configurationSnapshot.SaveChangesFailed;
+            ReturnedToPool = _configurationSnapshot.ReturnedToPool;
         }
 
         /// <summary>
@@ -855,14 +851,23 @@ namespace Microsoft.EntityFrameworkCore
         /// </summary>
         [EntityFrameworkInternal]
         void IDbContextPoolable.SnapshotConfiguration()
-            => _configurationSnapshot = new DbContextPoolConfigurationSnapshot(
-                _changeTracker?.AutoDetectChangesEnabled,
-                _changeTracker?.QueryTrackingBehavior,
-                _database?.AutoTransactionsEnabled,
-                _database?.AutoSavepointsEnabled,
-                _changeTracker?.LazyLoadingEnabled,
-                _changeTracker?.CascadeDeleteTiming,
-                _changeTracker?.DeleteOrphansTiming);
+        {
+            var changeTracker = ChangeTracker;
+            var database = Database;
+            _configurationSnapshot = new DbContextPoolConfigurationSnapshot(
+                changeTracker.AutoDetectChangesEnabled,
+                changeTracker.QueryTrackingBehavior,
+                database.AutoTransactionsEnabled,
+                database.AutoSavepointsEnabled,
+                changeTracker.LazyLoadingEnabled,
+                changeTracker.CascadeDeleteTiming,
+                changeTracker.DeleteOrphansTiming,
+                SavingChanges,
+                SavedChanges,
+                SaveChangesFailed,
+                LeasedFromPool,
+                ReturnedToPool);
+        }
 
         /// <summary>
         ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
@@ -874,7 +879,7 @@ namespace Microsoft.EntityFrameworkCore
         void IResettableService.ResetState()
         {
             OnReturnedToPool();
-            
+
             foreach (var service in _cachedResettableServices ??= GetResettableServices())
             {
                 service.ResetState();
@@ -893,7 +898,7 @@ namespace Microsoft.EntityFrameworkCore
         async Task IResettableService.ResetStateAsync(CancellationToken cancellationToken)
         {
             await OnReturnedToPoolAsync(cancellationToken);
-            
+
             foreach (var service in _cachedResettableServices ??= GetResettableServices())
             {
                 await service.ResetStateAsync(cancellationToken).ConfigureAwait(false);
@@ -917,7 +922,7 @@ namespace Microsoft.EntityFrameworkCore
 
             if (_sets != null)
             {
-                resettableServices.AddRange((_sets.Values.OfType<IResettableService>()));
+                resettableServices.AddRange(_sets.Values.OfType<IResettableService>());
             }
 
             return resettableServices;
@@ -960,10 +965,13 @@ namespace Microsoft.EntityFrameworkCore
                 _dbContextDependencies = null;
                 _changeTracker = null;
                 _database = null;
+                _configurationSnapshot = null;
 
                 SavingChanges = null;
                 SavedChanges = null;
                 SaveChangesFailed = null;
+                LeasedFromPool = null;
+                ReturnedToPool = null;
 
                 return true;
             }
