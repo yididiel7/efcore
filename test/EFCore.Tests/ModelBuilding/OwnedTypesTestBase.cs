@@ -275,6 +275,7 @@ namespace Microsoft.EntityFrameworkCore.ModelBuilding
             public virtual void Changing_ownership_uniqueness_throws()
             {
                 var modelBuilder = CreateModelBuilder();
+                var customerBuilder = modelBuilder.Entity<Customer>();
 
                 Assert.Equal(
                     CoreStrings.UnableToSetIsUnique(
@@ -282,9 +283,7 @@ namespace Microsoft.EntityFrameworkCore.ModelBuilding
                         nameof(Customer.Details),
                         nameof(Customer)),
                     Assert.Throws<InvalidOperationException>(
-                        () => modelBuilder
-                            .Entity<Customer>()
-                            .OwnsOne(
+                        () => customerBuilder.OwnsOne(
                                 c => c.Details,
                                 r =>
                                 {
@@ -739,15 +738,14 @@ namespace Microsoft.EntityFrameworkCore.ModelBuilding
             {
                 var modelBuilder = CreateModelBuilder();
 
-                modelBuilder.Owned<Whoopper>();
-                modelBuilder.Owned<Mustard>();
-                modelBuilder.Entity<ToastedBun>();
-                modelBuilder.Ignore<Tomato>();
+                modelBuilder.Owned<BookLabel>();
+                modelBuilder.Owned<Book>();
+                modelBuilder.Entity<BookDetails>();
 
                 Assert.Equal(
                     CoreStrings.AmbiguousOwnedNavigation(
-                        "ToastedBun.Whoopper#Whoopper.Mustard",
-                        nameof(Mustard)),
+                        "Book.AlternateLabel#BookLabel.Book",
+                        nameof(Book)),
                     Assert.Throws<InvalidOperationException>(() => modelBuilder.FinalizeModel()).Message);
             }
 
@@ -1345,7 +1343,9 @@ namespace Microsoft.EntityFrameworkCore.ModelBuilding
                         });
 
                 Assert.Equal(
-                    CoreStrings.ClashingOwnedEntityType(nameof(BookLabel)),
+                    modelBuilder.Model.IsShared(typeof(BookLabel))
+                    ? CoreStrings.ClashingSharedType(nameof(BookLabel))
+                    : CoreStrings.ClashingOwnedEntityType(nameof(BookLabel)),
                     Assert.Throws<InvalidOperationException>(
                         () => modelBuilder.Entity<AnotherBookLabel>().HasBaseType<BookLabel>()).Message);
             }
@@ -1411,7 +1411,7 @@ namespace Microsoft.EntityFrameworkCore.ModelBuilding
             }
 
             [ConditionalFact]
-            public virtual void Weak_types_with_FK_to_another_entity_works()
+            public virtual void Shared_type_entity_types_with_FK_to_another_entity_works()
             {
                 var modelBuilder = CreateModelBuilder();
                 modelBuilder.Entity<Country>();

@@ -52,52 +52,41 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
             relationshipCandidates = RemoveInheritedInverseNavigations(relationshipCandidates);
             relationshipCandidates = RemoveSingleSidedBaseNavigations(relationshipCandidates, entityTypeBuilder);
 
-            using (context.DelayConventions())
-            {
-                CreateRelationships(relationshipCandidates, entityTypeBuilder);
-            }
+            CreateRelationships(relationshipCandidates, entityTypeBuilder);
         }
 
         private IReadOnlyList<RelationshipCandidate> FindRelationshipCandidates(IConventionEntityTypeBuilder entityTypeBuilder)
         {
             var entityType = entityTypeBuilder.Metadata;
-            var model = entityType.Model;
             var relationshipCandidates = new Dictionary<IConventionEntityType, RelationshipCandidate>();
-            var ownership = entityTypeBuilder.Metadata.FindOwnership();
+            var ownership = entityType.FindOwnership();
             if (ownership == null
-                && model.IsOwned(entityTypeBuilder.Metadata.ClrType))
+                && entityType.IsOwned())
             {
+                // Handled when the ownership is actually added
                 return relationshipCandidates.Values.ToList();
             }
 
             foreach (var candidateTuple in Dependencies.MemberClassifier.GetNavigationCandidates(entityType))
             {
                 var navigationPropertyInfo = candidateTuple.Key;
-                var targetClrType = candidateTuple.Value;
+                var (targetClrType, shouldBeOwned) = candidateTuple.Value;
 
-                if (!IsCandidateNavigationProperty(entityTypeBuilder, navigationPropertyInfo.GetSimpleMemberName(), navigationPropertyInfo)
-                    || (model.IsOwned(targetClrType)
-                        && HasDeclaredAmbiguousNavigationsTo(entityType, targetClrType)))
+                if (!IsCandidateNavigationProperty(entityTypeBuilder, navigationPropertyInfo.GetSimpleMemberName(), navigationPropertyInfo))
                 {
                     continue;
                 }
 
-                IConventionEntityTypeBuilder? candidateTargetEntityTypeBuilder = ((InternalEntityTypeBuilder)entityTypeBuilder)
-                    .GetTargetEntityTypeBuilder(targetClrType, navigationPropertyInfo, ConfigurationSource.Convention);
-
+                var candidateTargetEntityTypeBuilder = TryGetTargetEntityTypeBuilder(
+                    entityTypeBuilder, targetClrType, navigationPropertyInfo, shouldBeOwned);
                 if (candidateTargetEntityTypeBuilder == null)
-                {
-                    continue;
-                }
-
-                var candidateTargetEntityType = candidateTargetEntityTypeBuilder.Metadata;
-                if (candidateTargetEntityType.IsKeyless)
                 {
                     continue;
                 }
 
                 if (!entityType.IsInModel)
                 {
+                    // Current entity type was removed while the target entity type was being added
                     foreach (var relationshipCandidate in relationshipCandidates.Values)
                     {
                         var targetType = relationshipCandidate.TargetTypeBuilder.Metadata;
@@ -111,17 +100,35 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
                     return Array.Empty<RelationshipCandidate>();
                 }
 
-                if (!model.IsOwned(targetClrType))
+                var candidateTargetEntityType = candidateTargetEntityTypeBuilder.Metadata;
+                if (candidateTargetEntityType.IsKeyless
+                    || (candidateTargetEntityType.IsOwned()
+                        && HasDeclaredAmbiguousNavigationsTo(entityType, targetClrType)))
                 {
-                    var targetOwnership = candidateTargetEntityType.FindOwnership();
-                    if (targetOwnership != null
-                        && (targetOwnership.PrincipalEntityType != entityType
-                            || targetOwnership.PrincipalToDependent?.Name != navigationPropertyInfo.GetSimpleMemberName())
-                        && (ownership == null
-                            || ownership.PrincipalEntityType != candidateTargetEntityType))
-                    {
-                        continue;
-                    }
+                    continue;
+                }
+
+                Check.DebugAssert(entityType.ClrType != targetClrType
+                    || !candidateTargetEntityType.IsOwned()
+                    || candidateTargetEntityType.FindOwnership()?.PrincipalToDependent?.Name == navigationPropertyInfo.GetSimpleMemberName(),
+                    "New self-referencing ownerships shouldn't be discovered");
+
+                var targetOwnership = candidateTargetEntityType.FindOwnership();
+                var shouldBeOwnership = candidateTargetEntityType.IsOwned()
+                    && (targetOwnership == null
+                        || (targetOwnership.PrincipalEntityType == entityType
+                            && targetOwnership.PrincipalToDependent?.Name == navigationPropertyInfo.GetSimpleMemberName()));
+
+                if (candidateTargetEntityType.IsOwned()
+                    && !shouldBeOwnership
+                    && (targetOwnership?.PrincipalEntityType == entityType
+                        || !candidateTargetEntityType.IsInOwnershipPath(entityType))
+                    && (ownership == null
+                        || !entityType.IsInOwnershipPath(candidateTargetEntityType)))
+                {
+                    // Only the owner or nested ownees can have navigations to an owned type
+                    // Also skip non-ownership navigations from the owner
+                    continue;
                 }
 
                 if (relationshipCandidates.TryGetValue(candidateTargetEntityType, out var existingCandidate))
@@ -147,24 +154,51 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
                     foreach (var inverseCandidateTuple in inverseCandidates)
                     {
                         var inversePropertyInfo = inverseCandidateTuple.Key;
-                        var inverseTargetType = inverseCandidateTuple.Value;
-
-                        if ((inverseTargetType != entityType.ClrType
-                                && (!inverseTargetType.IsAssignableFrom(entityType.ClrType)
-                                    || (!model.IsOwned(targetClrType)
-                                        && !candidateTargetEntityType.IsInOwnershipPath(entityType))))
-                            || navigationPropertyInfo.IsSameAs(inversePropertyInfo)
-                            || (ownership != null
-                                && !candidateTargetEntityType.IsInOwnershipPath(entityType)
-                                && (candidateTargetEntityType.IsOwned()
-                                    || !model.IsOwned(targetClrType))
-                                && (ownership.PrincipalEntityType != candidateTargetEntityType
-                                    || ownership.PrincipalToDependent?.Name != inversePropertyInfo.GetSimpleMemberName()))
+                        if (navigationPropertyInfo.IsSameAs(inversePropertyInfo)
                             || !IsCandidateNavigationProperty(
                                 candidateTargetEntityTypeBuilder, inversePropertyInfo.GetSimpleMemberName(), inversePropertyInfo))
                         {
                             continue;
                         }
+
+                        var inverseTargetType = inverseCandidateTuple.Value.Type;
+                        if (inverseTargetType != entityType.ClrType
+                            && (!inverseTargetType.IsAssignableFrom(entityType.ClrType)
+                                || (!shouldBeOwnership
+                                    && !candidateTargetEntityType.IsInOwnershipPath(entityType))))
+                        {
+                            // Only use inverse of a base type if the target is owned by the current entity type
+                            continue;
+                        }
+
+                        if (ownership != null
+                            && !shouldBeOwnership
+                            && !candidateTargetEntityType.IsInOwnershipPath(entityType)
+                            && (ownership.PrincipalEntityType == candidateTargetEntityType
+                                || !entityType.IsInOwnershipPath(candidateTargetEntityType))
+                            && (ownership.PrincipalEntityType != candidateTargetEntityType
+                                || ownership.PrincipalToDependent?.Name != inversePropertyInfo.GetSimpleMemberName()))
+                        {
+                            // Only the owner or nested ownees can have navigations to an owned type
+                            // Also skip non-ownership inverse candidates from the owner
+                            continue;
+                        }
+
+                        if (shouldBeOwnership
+                            && inversePropertyInfo.PropertyType.TryGetSequenceType() != null
+                            && navigations.Count == 1)
+                        {
+                            // Target type should be the principal, discover the relationship from the other side
+                            var targetType = candidateTargetEntityType;
+                            if (targetType.IsInModel
+                                && IsImplicitlyCreatedUnusedSharedType(targetType))
+                            {
+                                targetType.Builder.ModelBuilder.HasNoEntityType(targetType);
+                            }
+
+                            goto Continue;
+                        }
+
 
                         if (!inverseNavigationCandidates.Contains(inversePropertyInfo))
                         {
@@ -174,9 +208,18 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
                 }
 
                 relationshipCandidates[candidateTargetEntityType] =
-                    new RelationshipCandidate(candidateTargetEntityTypeBuilder, navigations, inverseNavigationCandidates);
+                    new RelationshipCandidate(candidateTargetEntityTypeBuilder, navigations, inverseNavigationCandidates, shouldBeOwnership);
+
+                Continue:;
             }
 
+            return UpdateTargetEntityTypes(entityTypeBuilder, relationshipCandidates);
+        }
+
+        private List<RelationshipCandidate> UpdateTargetEntityTypes(
+            IConventionEntityTypeBuilder entityTypeBuilder,
+            Dictionary<IConventionEntityType, RelationshipCandidate> relationshipCandidates)
+        {
             var candidates = new List<RelationshipCandidate>();
             foreach (var relationshipCandidate in relationshipCandidates.Values)
             {
@@ -191,12 +234,11 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
                     continue;
                 }
 
-                // The entity type might have been converted to a weak entity type
-                var actualTargetEntityTypeBuilder =
-                    ((InternalEntityTypeBuilder)entityTypeBuilder).GetTargetEntityTypeBuilder(
-                        relationshipCandidate.TargetTypeBuilder.Metadata.ClrType,
-                        relationshipCandidate.NavigationProperties.Single(),
-                        ConfigurationSource.Convention);
+                // The entity type might have been converted to a shared type entity type
+                var actualTargetEntityTypeBuilder = TryGetTargetEntityTypeBuilder(
+                    entityTypeBuilder,
+                    relationshipCandidate.TargetTypeBuilder.Metadata.ClrType,
+                    relationshipCandidate.NavigationProperties.Single());
 
                 if (actualTargetEntityTypeBuilder == null)
                 {
@@ -205,11 +247,44 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
 
                 candidates.Add(
                     new RelationshipCandidate(
-                        actualTargetEntityTypeBuilder, relationshipCandidate.NavigationProperties,
-                        relationshipCandidate.InverseProperties));
+                        actualTargetEntityTypeBuilder,
+                        relationshipCandidate.NavigationProperties,
+                        relationshipCandidate.InverseProperties,
+                        relationshipCandidate.IsOwnership));
             }
 
             return candidates;
+        }
+
+        /// <summary>
+        ///     Finds or tries to create an entity type target for the given navigation member.
+        /// </summary>
+        /// <param name="entityTypeBuilder"> The builder for the referencing entity type. </param>
+        /// <param name="targetClrType"> The CLR type of the target entity type. </param>
+        /// <param name="navigationMemberInfo"> The navigation member. </param>
+        /// <param name="shouldBeOwned"> Whether the target entity type should be owned. </param>
+        /// <param name="shouldCreate"> Whether an entity type should be created if one doesn't currently exist. </param>
+        /// <returns> The builder for the target entity type or <see langword="null"/> if it can't be created. </returns>
+        protected virtual IConventionEntityTypeBuilder? TryGetTargetEntityTypeBuilder(
+            IConventionEntityTypeBuilder entityTypeBuilder,
+            Type targetClrType,
+            MemberInfo navigationMemberInfo,
+            bool? shouldBeOwned = null,
+            bool shouldCreate = true)
+        {
+            if (shouldCreate)
+            {
+                var targetEntityTypeBuilder = ((InternalEntityTypeBuilder)entityTypeBuilder)
+                    .GetTargetEntityTypeBuilder(targetClrType, navigationMemberInfo, ConfigurationSource.Convention,
+                        shouldBeOwned ?? ShouldBeOwned(targetClrType, entityTypeBuilder.Metadata.Model));
+                if (targetEntityTypeBuilder != null)
+                {
+                    return targetEntityTypeBuilder;
+                }
+            }
+
+            return ((InternalEntityTypeBuilder)entityTypeBuilder)
+                .GetTargetEntityTypeBuilder(targetClrType, navigationMemberInfo, null, shouldBeOwned);
         }
 
         private static IReadOnlyList<RelationshipCandidate> RemoveIncompatibleWithExistingRelationships(
@@ -284,7 +359,8 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
                             new RelationshipCandidate(
                                 targetEntityTypeBuilder,
                                 new List<PropertyInfo> { navigationProperty },
-                                new List<PropertyInfo>()));
+                                new List<PropertyInfo>(),
+                                relationshipCandidate.IsOwnership));
 
                         if (relationshipCandidate.TargetTypeBuilder.Metadata == entityTypeBuilder.Metadata
                             && relationshipCandidate.InverseProperties.Count > 0)
@@ -321,7 +397,8 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
                             new RelationshipCandidate(
                                 targetEntityTypeBuilder,
                                 new List<PropertyInfo> { navigationProperty },
-                                new List<PropertyInfo> { compatibleInverse })
+                                new List<PropertyInfo> { compatibleInverse },
+                                relationshipCandidate.IsOwnership)
                         );
 
                         if (relationshipCandidate.TargetTypeBuilder.Metadata == entityTypeBuilder.Metadata
@@ -521,45 +598,11 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
                     || (targetEntityType.BaseType != null
                         && HasAmbiguousNavigationsTo(targetEntityType.BaseType, entityType.ClrType));
 
-                var ambiguousOwnership = relationshipCandidate.NavigationProperties.Count == 1
-                    && relationshipCandidate.InverseProperties.Count == 1
-                    && entityType.GetConfigurationSource() != ConfigurationSource.Explicit
-                    && targetEntityType.GetConfigurationSource() != ConfigurationSource.Explicit
-                    && targetEntityType.Model.IsOwned(entityType.ClrType)
-                    && targetEntityType.Model.IsOwned(targetEntityType.ClrType);
-
-                if (ambiguousOwnership)
-                {
-                    var existingNavigation =
-                        entityType.FindNavigation(relationshipCandidate.NavigationProperties.Single().GetSimpleMemberName());
-                    if (existingNavigation != null
-                        && existingNavigation.ForeignKey.DeclaringEntityType == targetEntityType
-                        && existingNavigation.ForeignKey.GetPrincipalEndConfigurationSource()
-                            .OverridesStrictly(ConfigurationSource.Convention))
-                    {
-                        ambiguousOwnership = false;
-                    }
-                    else
-                    {
-                        var existingInverse =
-                            targetEntityType.FindNavigation(relationshipCandidate.InverseProperties.Single().GetSimpleMemberName());
-                        if (existingInverse != null
-                            && existingInverse.ForeignKey.PrincipalEntityType == targetEntityType
-                            && existingInverse.ForeignKey.GetPrincipalEndConfigurationSource()
-                                .OverridesStrictly(ConfigurationSource.Convention))
-                        {
-                            ambiguousOwnership = false;
-                        }
-                    }
-                }
-
                 if ((relationshipCandidate.NavigationProperties.Count > 1
                         && relationshipCandidate.InverseProperties.Count > 0
-                        && (!targetEntityType.Model.IsOwned(targetEntityType.ClrType)
-                            || entityType.IsInOwnershipPath(targetEntityType)))
+                        && !relationshipCandidate.IsOwnership)
                     || relationshipCandidate.InverseProperties.Count > 1
                     || isAmbiguousOnBase
-                    || ambiguousOwnership
                     || HasDeclaredAmbiguousNavigationsTo(entityType, targetEntityType.ClrType)
                     || HasDeclaredAmbiguousNavigationsTo(targetEntityType, entityType.ClrType))
                 {
@@ -603,7 +646,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
                 foreach (var navigation in relationshipCandidate.NavigationProperties)
                 {
                     if (!targetEntityType.IsInModel
-                        && !targetEntityType.Model.IsOwned(targetEntityType.ClrType))
+                        && !targetEntityType.IsOwned())
                     {
                         continue;
                     }
@@ -614,15 +657,10 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
                         continue;
                     }
 
-                    var targetOwned = !entityType.IsInOwnershipPath(targetEntityType)
-                        && (targetEntityType.Model.IsOwned(targetEntityType.ClrType)
-                            || (targetEntityType.HasSharedClrType
-                                && targetEntityType.Model.FindEntityTypes(targetEntityType.ClrType).Any(e => e.IsOwned())));
-
                     var inverse = relationshipCandidate.InverseProperties.SingleOrDefault();
                     if (inverse == null)
                     {
-                        if (targetOwned)
+                        if (relationshipCandidate.IsOwnership)
                         {
                             entityTypeBuilder.HasOwnership(targetEntityType.ClrType, navigation);
                         }
@@ -639,23 +677,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
                             continue;
                         }
 
-                        if (targetOwned
-                            && entityType.Model.IsOwned(entityType.ClrType))
-                        {
-                            var existingInverse = targetEntityType.FindNavigation(inverse.GetSimpleMemberName());
-                            if (inverse.PropertyType.TryGetSequenceType() != null
-                                || targetEntityType.GetConfigurationSource() == ConfigurationSource.Explicit
-                                || (existingInverse != null
-                                    && existingInverse.ForeignKey.DeclaringEntityType == entityType
-                                    && existingInverse.ForeignKey.GetPrincipalEndConfigurationSource()
-                                        .OverridesStrictly(ConfigurationSource.Convention)))
-                            {
-                                // Target type is the principal, so the ownership should be configured from the other side
-                                targetOwned = false;
-                            }
-                        }
-
-                        if (targetOwned)
+                        if (relationshipCandidate.IsOwnership)
                         {
                             entityTypeBuilder.HasOwnership(targetEntityType.ClrType, navigation, inverse);
                         }
@@ -676,7 +698,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
                 if (relationshipCandidate.NavigationProperties.Count == 0)
                 {
                     if (relationshipCandidate.InverseProperties.Count == 0
-                        || targetEntityType.Model.IsOwned(targetEntityType.ClrType))
+                        || targetEntityType.IsOwned())
                     {
                         unusedEntityTypes.Add(targetEntityType);
                     }
@@ -709,6 +731,15 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
                 }
             }
         }
+
+        /// <summary>
+        ///     Returns a value indicating whether the given entity type should be added as owned if it isn't currently in the model.
+        /// </summary>
+        /// <param name="targetType"> Target entity type. </param>
+        /// <param name="model"> The model. </param>
+        /// <returns> <see langword="true"/> if the given entity type should be owned. </returns>
+        protected virtual bool? ShouldBeOwned(Type targetType, IConventionModel model)
+            => null;
 
         private void RemoveNavigation(
             PropertyInfo navigationProperty,
@@ -917,8 +948,8 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
             var targetClrType = ambiguousNavigation.Value.Value;
             RemoveAmbiguous(entityType, targetClrType);
 
-            var targetType = ((InternalEntityTypeBuilder)entityType.Builder)
-                .GetTargetEntityTypeBuilder(targetClrType, ambiguousNavigation.Value.Key, null)?.Metadata;
+            var targetType = TryGetTargetEntityTypeBuilder(
+                entityType.Builder, targetClrType, ambiguousNavigation.Value.Key, shouldCreate: false)?.Metadata;
             if (targetType != null)
             {
                 RemoveAmbiguous(targetType, entityType.ClrType);
@@ -1068,16 +1099,19 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
             public RelationshipCandidate(
                 IConventionEntityTypeBuilder targetTypeBuilder,
                 List<PropertyInfo> navigations,
-                List<PropertyInfo> inverseNavigations)
+                List<PropertyInfo> inverseNavigations,
+                bool ownership)
             {
                 TargetTypeBuilder = targetTypeBuilder;
                 NavigationProperties = navigations;
                 InverseProperties = inverseNavigations;
+                IsOwnership = ownership;
             }
 
             public IConventionEntityTypeBuilder TargetTypeBuilder { [DebuggerStepThrough] get; }
             public List<PropertyInfo> NavigationProperties { [DebuggerStepThrough] get; }
             public List<PropertyInfo> InverseProperties { [DebuggerStepThrough] get; }
+            public bool IsOwnership { [DebuggerStepThrough] get; }
 
             private string DebuggerDisplay()
                 => TargetTypeBuilder.Metadata.ToDebugString(MetadataDebugStringOptions.SingleLineDefault)
@@ -1085,7 +1119,8 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
                     + string.Join(", ", NavigationProperties.Select(p => p.Name))
                     + "] - ["
                     + string.Join(", ", InverseProperties.Select(p => p.Name))
-                    + "]";
+                    + "]"
+                    + (IsOwnership ? " Ownership" : "");
         }
     }
 }

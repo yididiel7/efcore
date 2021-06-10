@@ -654,7 +654,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Builders
         ///     The same builder instance if the skip navigation was removed,
         ///     <see langword="null" /> otherwise.
         /// </returns>
-        IConventionEntityTypeBuilder? HasNoSkipNavigation(IReadOnlySkipNavigation skipNavigation, bool fromDataAnnotation = false);
+        IConventionEntityTypeBuilder? HasNoSkipNavigation(IConventionSkipNavigation skipNavigation, bool fromDataAnnotation = false);
 
         /// <summary>
         ///     Returns a value indicating whether the skip navigation can be removed from this entity type.
@@ -662,7 +662,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Builders
         /// <param name="skipNavigation"> The skip navigation to be removed. </param>
         /// <param name="fromDataAnnotation"> Indicates whether the configuration was specified using a data annotation. </param>
         /// <returns> <see langword="true" /> if the skip navigation can be removed from this entity type. </returns>
-        bool CanRemoveSkipNavigation(IReadOnlySkipNavigation skipNavigation, bool fromDataAnnotation = false);
+        bool CanRemoveSkipNavigation(IConventionSkipNavigation skipNavigation, bool fromDataAnnotation = false);
 
         /// <summary>
         ///     Returns a value indicating whether the given navigation can be added to this entity type.
