@@ -473,9 +473,9 @@ namespace Microsoft.EntityFrameworkCore
         ///         Saves all changes made in this context to the database.
         ///     </para>
         ///     <para>
-        ///         This method will automatically call <see cref="ChangeTracking.ChangeTracker.DetectChanges" /> to discover any
+        ///         This method will automatically call <see cref="ChangeTracker.DetectChanges" /> to discover any
         ///         changes to entity instances before saving to the underlying database. This can be disabled via
-        ///         <see cref="ChangeTracking.ChangeTracker.AutoDetectChangesEnabled" />.
+        ///         <see cref="ChangeTracker.AutoDetectChangesEnabled" />.
         ///     </para>
         /// </summary>
         /// <returns>
@@ -497,13 +497,13 @@ namespace Microsoft.EntityFrameworkCore
         ///         Saves all changes made in this context to the database.
         ///     </para>
         ///     <para>
-        ///         This method will automatically call <see cref="ChangeTracking.ChangeTracker.DetectChanges" /> to discover any
+        ///         This method will automatically call <see cref="ChangeTracker.DetectChanges" /> to discover any
         ///         changes to entity instances before saving to the underlying database. This can be disabled via
-        ///         <see cref="ChangeTracking.ChangeTracker.AutoDetectChangesEnabled" />.
+        ///         <see cref="ChangeTracker.AutoDetectChangesEnabled" />.
         ///     </para>
         /// </summary>
         /// <param name="acceptAllChangesOnSuccess">
-        ///     Indicates whether <see cref="ChangeTracking.ChangeTracker.AcceptAllChanges" /> is called after the changes have
+        ///     Indicates whether <see cref="ChangeTracker.AcceptAllChanges" /> is called after the changes have
         ///     been sent successfully to the database.
         /// </param>
         /// <returns>
@@ -580,9 +580,9 @@ namespace Microsoft.EntityFrameworkCore
         ///         Saves all changes made in this context to the database.
         ///     </para>
         ///     <para>
-        ///         This method will automatically call <see cref="ChangeTracking.ChangeTracker.DetectChanges" /> to discover any
+        ///         This method will automatically call <see cref="ChangeTracker.DetectChanges" /> to discover any
         ///         changes to entity instances before saving to the underlying database. This can be disabled via
-        ///         <see cref="ChangeTracking.ChangeTracker.AutoDetectChangesEnabled" />.
+        ///         <see cref="ChangeTracker.AutoDetectChangesEnabled" />.
         ///     </para>
         ///     <para>
         ///         Multiple active operations on the same context instance are not supported.  Use <see langword="await" /> to ensure
@@ -611,9 +611,9 @@ namespace Microsoft.EntityFrameworkCore
         ///         Saves all changes made in this context to the database.
         ///     </para>
         ///     <para>
-        ///         This method will automatically call <see cref="ChangeTracking.ChangeTracker.DetectChanges" /> to discover any
+        ///         This method will automatically call <see cref="ChangeTracker.DetectChanges" /> to discover any
         ///         changes to entity instances before saving to the underlying database. This can be disabled via
-        ///         <see cref="ChangeTracking.ChangeTracker.AutoDetectChangesEnabled" />.
+        ///         <see cref="ChangeTracker.AutoDetectChangesEnabled" />.
         ///     </para>
         ///     <para>
         ///         Multiple active operations on the same context instance are not supported.  Use <see langword="await" /> to ensure
@@ -621,7 +621,7 @@ namespace Microsoft.EntityFrameworkCore
         ///     </para>
         /// </summary>
         /// <param name="acceptAllChangesOnSuccess">
-        ///     Indicates whether <see cref="ChangeTracking.ChangeTracker.AcceptAllChanges" /> is called after the changes have
+        ///     Indicates whether <see cref="ChangeTracker.AcceptAllChanges" /> is called after the changes have
         ///     been sent successfully to the database.
         /// </param>
         /// <param name="cancellationToken"> A <see cref="CancellationToken" /> to observe while waiting for the task to complete. </param>
@@ -705,67 +705,75 @@ namespace Microsoft.EntityFrameworkCore
 
         /// <summary>
         ///     <para>
-        ///         An event fired when this context instance is leased from the context pool.
+        ///         Called when this context instance is leased from the context pool.
+        ///         Can be overridden in a derived context to intercept this event.
+        ///         <see cref="OnLeasedFromPoolAsync(CancellationToken)"/> must be overridden as well.
         ///     </para>
         ///     <para>
-        ///         This event is only fired when 'DbContext' pooling is enabled through use of
+        ///         This method is only called when 'DbContext' pooling is enabled through use of
         ///         <see cref="EntityFrameworkServiceCollectionExtensions.AddDbContextPool{TContext}(IServiceCollection,Action{DbContextOptionsBuilder},int)"/>
         ///         or
         ///         <see cref="EntityFrameworkServiceCollectionExtensions.AddPooledDbContextFactory{TContext}(IServiceCollection,Action{DbContextOptionsBuilder},int)"/>.
         ///     </para>
         /// </summary>
-        public event EventHandler<EventArgs>? LeasedFromPool;
-
-        /// <summary>
-        ///     Called to fire the <see cref="LeasedFromPool"/> event. Can be overriden in a derived context to intercept this event.
-        /// </summary>
         protected virtual void OnLeasedFromPool()
-            => LeasedFromPool?.Invoke(this, EventArgs.Empty);
+        {
+        }
 
         /// <summary>
-        ///     Called to fire the <see cref="LeasedFromPool"/> event. Can be overriden in a derived context to intercept this event.
+        ///     <para>
+        ///         Called when this context instance is leased from the context pool.
+        ///         Can be overridden in a derived context to intercept this event.
+        ///         <see cref="OnLeasedFromPool()"/> must be overridden as well.
+        ///     </para>
+        ///     <para>
+        ///         This method is only called when 'DbContext' pooling is enabled through use of
+        ///         <see cref="EntityFrameworkServiceCollectionExtensions.AddDbContextPool{TContext}(IServiceCollection,Action{DbContextOptionsBuilder},int)"/>
+        ///         or
+        ///         <see cref="EntityFrameworkServiceCollectionExtensions.AddPooledDbContextFactory{TContext}(IServiceCollection,Action{DbContextOptionsBuilder},int)"/>.
+        ///     </para>
         /// </summary>
         /// <param name="cancellationToken"> A <see cref="CancellationToken" /> to observe while waiting for the task to complete. </param>
         /// <returns> A task that represents the asynchronous operation. </returns>
         /// <exception cref="OperationCanceledException"> If the <see cref="CancellationToken" /> is canceled. </exception>
         protected virtual Task OnLeasedFromPoolAsync(CancellationToken cancellationToken)
-        {
-            LeasedFromPool?.Invoke(this, EventArgs.Empty);
-
-            return Task.CompletedTask;
-        }
+            => Task.CompletedTask;
 
         /// <summary>
         ///     <para>
-        ///         An event fired when this context instance is returned to the context pool.
+        ///         Called when this context instance is returned to the context pool.
+        ///         Can be overridden in a derived context to intercept this event.
+        ///         <see cref="OnReturnedToPoolAsync(CancellationToken)"/> must be overridden as well.
         ///     </para>
         ///     <para>
-        ///         This event is only fired when 'DbContext' pooling is enabled through use of
+        ///         This method is only called when 'DbContext' pooling is enabled through use of
         ///         <see cref="EntityFrameworkServiceCollectionExtensions.AddDbContextPool{TContext}(IServiceCollection,Action{DbContextOptionsBuilder},int)"/>
         ///         or
         ///         <see cref="EntityFrameworkServiceCollectionExtensions.AddPooledDbContextFactory{TContext}(IServiceCollection,Action{DbContextOptionsBuilder},int)"/>.
         ///     </para>
         /// </summary>
-        public event EventHandler<EventArgs>? ReturnedToPool;
-
-        /// <summary>
-        ///     Called to fire the <see cref="ReturnedToPool"/> event. Can be overriden in a derived context to intercept this event.
-        /// </summary>
         protected virtual void OnReturnedToPool()
-            => ReturnedToPool?.Invoke(this, EventArgs.Empty);
+        {
+        }
 
         /// <summary>
-        ///     Called to fire the <see cref="ReturnedToPool"/> event. Can be overriden in a derived context to intercept this event.
+        ///     <para>
+        ///         Called when this context instance is returned to the context pool.
+        ///         Can be overridden in a derived context to intercept this event.
+        ///         <see cref="OnReturnedToPool()"/> must be overridden as well.
+        ///     </para>
+        ///     <para>
+        ///         This method is only called when 'DbContext' pooling is enabled through use of
+        ///         <see cref="EntityFrameworkServiceCollectionExtensions.AddDbContextPool{TContext}(IServiceCollection,Action{DbContextOptionsBuilder},int)"/>
+        ///         or
+        ///         <see cref="EntityFrameworkServiceCollectionExtensions.AddPooledDbContextFactory{TContext}(IServiceCollection,Action{DbContextOptionsBuilder},int)"/>.
+        ///     </para>
         /// </summary>
         /// <param name="cancellationToken"> A <see cref="CancellationToken" /> to observe while waiting for the task to complete. </param>
         /// <returns> A task that represents the asynchronous operation. </returns>
         /// <exception cref="OperationCanceledException"> If the <see cref="CancellationToken" /> is canceled. </exception>
         protected virtual Task OnReturnedToPoolAsync(CancellationToken cancellationToken)
-        {
-            ReturnedToPool?.Invoke(this, EventArgs.Empty);
-
-            return Task.CompletedTask;
-        }
+            => Task.CompletedTask;
 
         /// <summary>
         ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
@@ -789,11 +797,6 @@ namespace Microsoft.EntityFrameworkCore
             SetLeaseInternal(lease);
 
             OnLeasedFromPool();
-
-            if (_configurationSnapshot != null)
-            {
-                LeasedFromPool = _configurationSnapshot.LeasedFromPool;
-            }
         }
 
         /// <summary>
@@ -808,11 +811,6 @@ namespace Microsoft.EntityFrameworkCore
             SetLeaseInternal(lease);
 
             await OnLeasedFromPoolAsync(cancellationToken);
-
-            if (_configurationSnapshot != null)
-            {
-                LeasedFromPool = _configurationSnapshot.LeasedFromPool;
-            }
         }
 
         private void SetLeaseInternal(DbContextLease lease)
@@ -840,7 +838,6 @@ namespace Microsoft.EntityFrameworkCore
             SavingChanges = _configurationSnapshot.SavingChanges;
             SavedChanges = _configurationSnapshot.SavedChanges;
             SaveChangesFailed = _configurationSnapshot.SaveChangesFailed;
-            ReturnedToPool = _configurationSnapshot.ReturnedToPool;
         }
 
         /// <summary>
@@ -864,9 +861,7 @@ namespace Microsoft.EntityFrameworkCore
                 changeTracker.DeleteOrphansTiming,
                 SavingChanges,
                 SavedChanges,
-                SaveChangesFailed,
-                LeasedFromPool,
-                ReturnedToPool);
+                SaveChangesFailed);
         }
 
         /// <summary>
@@ -970,8 +965,6 @@ namespace Microsoft.EntityFrameworkCore
                 SavingChanges = null;
                 SavedChanges = null;
                 SaveChangesFailed = null;
-                LeasedFromPool = null;
-                ReturnedToPool = null;
 
                 return true;
             }

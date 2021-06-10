@@ -129,9 +129,6 @@ namespace Microsoft.EntityFrameworkCore
                 Database.AutoSavepointsEnabled = false;
                 ChangeTracker.CascadeDeleteTiming = CascadeTiming.Never;
                 ChangeTracker.DeleteOrphansTiming = CascadeTiming.Never;
-
-                LeasedFromPool += OnLeasedFromPool;
-                ReturnedToPool += OnReturnedToPool;
             }
 
             public int LeasedCount { get; private set; }
@@ -141,11 +138,28 @@ namespace Microsoft.EntityFrameworkCore
             public bool? AsyncReturn { get; private set; }
             public bool? SyncReturn { get; private set; }
 
-            private void OnLeasedFromPool(object sender, EventArgs e)
-                => LeasedCount++;
+            protected override void OnLeasedFromPool()
+            {
+                LeasedCount++;
+            }
 
-            private void OnReturnedToPool(object sender, EventArgs e)
-                => ReturnedCount++;
+            protected override Task OnLeasedFromPoolAsync(CancellationToken cancellationToken)
+            {
+                LeasedCount++;
+                return Task.CompletedTask;
+            }
+
+            protected override void OnReturnedToPool()
+            {
+                ReturnedCount++;
+                base.OnReturnedToPool();
+            }
+
+            protected override Task OnReturnedToPoolAsync(CancellationToken cancellationToken)
+            {
+                ReturnedCount++;
+                return Task.CompletedTask;
+            }
 
             protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
             {
@@ -241,8 +255,6 @@ namespace Microsoft.EntityFrameworkCore
             public SecondContext(DbContextOptions options)
                 : base(options)
             {
-                LeasedFromPool += OnLeasedFromPool;
-                ReturnedToPool += OnReturnedToPool;
             }
 
             public int LeasedCount { get; private set; }
@@ -252,11 +264,28 @@ namespace Microsoft.EntityFrameworkCore
             public bool? AsyncReturn { get; private set; }
             public bool? SyncReturn { get; private set; }
 
-            private void OnLeasedFromPool(object sender, EventArgs e)
-                => LeasedCount++;
+            protected override void OnLeasedFromPool()
+            {
+                LeasedCount++;
+            }
 
-            private void OnReturnedToPool(object sender, EventArgs e)
-                => ReturnedCount++;
+            protected override Task OnLeasedFromPoolAsync(CancellationToken cancellationToken)
+            {
+                LeasedCount++;
+                return Task.CompletedTask;
+            }
+
+            protected override void OnReturnedToPool()
+            {
+                ReturnedCount++;
+                base.OnReturnedToPool();
+            }
+
+            protected override Task OnReturnedToPoolAsync(CancellationToken cancellationToken)
+            {
+                ReturnedCount++;
+                return Task.CompletedTask;
+            }
         }
 
         private class SecondContextWithOverrides : DbContext, ISecondContext
@@ -1245,16 +1274,6 @@ namespace Microsoft.EntityFrameworkCore
             context1.SavedChanges += (sender, args) => { };
             context1.SaveChangesFailed += (sender, args) => { };
 
-            var originalLeasedFromPool = GetContextEventField(context1, nameof(DbContext.LeasedFromPool));
-            var leasedCalled = false;
-            context1.LeasedFromPool += (sender, args) => { leasedCalled = true; };
-            Assert.NotSame(originalLeasedFromPool, GetContextEventField(context1, nameof(DbContext.LeasedFromPool)));
-
-            var originalReturnedToPool = GetContextEventField(context1, nameof(DbContext.ReturnedToPool));
-            var returnedCalled = false;
-            context1.ReturnedToPool += (sender, args) => { returnedCalled = true; };
-            Assert.NotSame(originalReturnedToPool, GetContextEventField(context1, nameof(DbContext.ReturnedToPool)));
-
             await Dispose(serviceScope, async);
 
             serviceScope = serviceProvider.CreateScope();
@@ -1269,12 +1288,6 @@ namespace Microsoft.EntityFrameworkCore
             Assert.Null(GetContextEventField(context2, nameof(DbContext.SavingChanges)));
             Assert.Null(GetContextEventField(context2, nameof(DbContext.SavedChanges)));
             Assert.Null(GetContextEventField(context2, nameof(DbContext.SaveChangesFailed)));
-            Assert.NotNull(GetContextEventField(context2, nameof(DbContext.LeasedFromPool)));
-            Assert.NotNull(GetContextEventField(context2, nameof(DbContext.ReturnedToPool)));
-            Assert.Same(originalLeasedFromPool, GetContextEventField(context2, nameof(DbContext.LeasedFromPool)));
-            Assert.Same(originalReturnedToPool, GetContextEventField(context2, nameof(DbContext.ReturnedToPool)));
-            Assert.True(leasedCalled);
-            Assert.True(returnedCalled);
             Assert.Equal(2, context2.LeasedCount);
             Assert.Equal(1, context2.ReturnedCount);
 
@@ -1310,16 +1323,6 @@ namespace Microsoft.EntityFrameworkCore
             context1.SavedChanges += (sender, args) => { };
             context1.SaveChangesFailed += (sender, args) => { };
 
-            var originalLeasedFromPool = GetContextEventField(context1, nameof(DbContext.LeasedFromPool));
-            var leasedCalled = false;
-            context1.LeasedFromPool += (sender, args) => { leasedCalled = true; };
-            Assert.NotSame(originalLeasedFromPool, GetContextEventField(context1, nameof(DbContext.LeasedFromPool)));
-
-            var originalReturnedToPool = GetContextEventField(context1, nameof(DbContext.ReturnedToPool));
-            var returnedCalled = false;
-            context1.ReturnedToPool += (sender, args) => { returnedCalled = true; };
-            Assert.NotSame(originalReturnedToPool, GetContextEventField(context1, nameof(DbContext.ReturnedToPool)));
-
             await Dispose(context1, async);
 
             var context2 = async ? await factory.CreateDbContextAsync() : factory.CreateDbContext();
@@ -1329,12 +1332,6 @@ namespace Microsoft.EntityFrameworkCore
             Assert.Null(GetContextEventField(context2, nameof(DbContext.SavingChanges)));
             Assert.Null(GetContextEventField(context2, nameof(DbContext.SavedChanges)));
             Assert.Null(GetContextEventField(context2, nameof(DbContext.SaveChangesFailed)));
-            Assert.NotNull(GetContextEventField(context2, nameof(DbContext.LeasedFromPool)));
-            Assert.NotNull(GetContextEventField(context2, nameof(DbContext.ReturnedToPool)));
-            Assert.Same(originalLeasedFromPool, GetContextEventField(context2, nameof(DbContext.LeasedFromPool)));
-            Assert.Same(originalReturnedToPool, GetContextEventField(context2, nameof(DbContext.ReturnedToPool)));
-            Assert.True(leasedCalled);
-            Assert.True(returnedCalled);
             Assert.Equal(2, context2.LeasedCount);
             Assert.Equal(1, context2.ReturnedCount);
 
